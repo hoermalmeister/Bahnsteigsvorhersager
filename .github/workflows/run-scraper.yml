@@ -1,0 +1,29 @@
+name: Sběr dat o vlacích (SŽDC/ČD)
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # Každých 5 minut
+  workflow_dispatch: # Přidá na GitHub tlačítko pro manuální spuštění
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Stáhnutí kódu z repozitáře
+        uses: actions/checkout@v4
+
+      - name: Nastavení Pythonu
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Instalace závislostí
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Spuštění skriptu
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scraper.py
