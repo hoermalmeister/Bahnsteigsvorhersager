@@ -1,8 +1,9 @@
 import os
 import requests
 import psycopg2
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from flask import Flask, render_template, jsonify
-from datetime import datetime
 
 app = Flask(__name__)
 DB_URL = os.environ.get('DATABASE_URL')
@@ -97,23 +98,25 @@ def get_board():
             t['Destination'] = f"Ze směru: {t.get('Destination', '')}"
             combined_trains.append(t)
             
-# 4. Chytré seřazení podle času (plovoucí okno pro ošetření půlnoci)
-    now = datetime.now()
+    # 4. Chytré seřazení podle času (s ošetřením časového pásma a půlnoci)
+    prague_tz = ZoneInfo("Europe/Prague")
+    now = datetime.now(prague_tz)
+
     def sort_key(train):
         time_str = train.get('DT', '')
         try:
             h, m = map(int, time_str.split(':'))
-            train_mins = h * 60 + m
-            now_mins = now.hour * 60 + now.minute
+            # Vytvoříme přesný čas vlaku v dnešním dni podle pražského času
+            train_time = now.replace(hour=h, minute=m, second=0, microsecond=0)
             
-            # Pokud je čas vlaku o více než 4 hodiny menší než aktuální čas, 
-            # logicky už patří k dalšímu dni (např. teď je 22:00, ale vlak jede 00:15)
-            if train_mins < now_mins - 240:
-                train_mins += 1440 # Přidáme 24 hodin v minutách
+            # Pokud je čas vlaku o více než 4 hodiny v minulosti oproti aktuálnímu času, 
+            # logicky to znamená, že vlak přejíždí přes půlnoc do zítřka.
+            if train_time < now - timedelta(hours=4):
+                train_time += timedelta(days=1)
                 
-            return train_mins
-        except:
-            return 9999 # Fallback na konec seznamu pro jistotu
+            return train_time
+        except Exception:
+            return now + timedelta(days=365) # Pokud chybí čas, hodíme vlak na konec
 
     combined_trains.sort(key=sort_key)
 
