@@ -1,29 +1,38 @@
-name: Sběr dat o vlacích (SŽDC/ČD)
+name: Vlaky - Sběr a Agregace
 
 on:
   schedule:
-    - cron: '*/5 * * * *' # Každých 5 minut
-  workflow_dispatch: # Přidá na GitHub tlačítko pro manuální spuštění
+    - cron: '*/5 * * * *' # Běžný sběr každých 5 minut
+    - cron: '0 3 * * *'   # Post-processing každý den ve 3:00 ráno
+  workflow_dispatch:
 
 jobs:
   scrape:
+    if: github.event.schedule == '*/5 * * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Stáhnutí kódu z repozitáře
-        uses: actions/checkout@v4
-
-      - name: Nastavení Pythonu
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          
-      - name: Instalace závislostí
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Spuštění skriptu
+      - run: pip install -r requirements.txt
+      - name: Sběr dat
         env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scraper.py
+
+  post-process:
+    if: github.event.schedule == '0 3 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: Noční úklid a agregace
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python postprocessor.py
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python scraper.py
