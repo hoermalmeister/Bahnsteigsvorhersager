@@ -97,18 +97,23 @@ def get_board():
             t['Destination'] = f"Ze směru: {t.get('Destination', '')}"
             combined_trains.append(t)
             
-    # 4. Chytré seřazení podle času (ošetření půlnoci)
-    current_hour = datetime.now().hour
+# 4. Chytré seřazení podle času (plovoucí okno pro ošetření půlnoci)
+    now = datetime.now()
     def sort_key(train):
-        time_str = train.get('DT', '00:00')
+        time_str = train.get('DT', '')
         try:
             h, m = map(int, time_str.split(':'))
-            # Pokud je večer (po 20:00) a vlak jede až po půlnoci (0-3 h), přidáme mu virtuálně 24 hodin
-            if current_hour > 20 and h < 4:
-                h += 24
-            return h * 60 + m
+            train_mins = h * 60 + m
+            now_mins = now.hour * 60 + now.minute
+            
+            # Pokud je čas vlaku o více než 4 hodiny menší než aktuální čas, 
+            # logicky už patří k dalšímu dni (např. teď je 22:00, ale vlak jede 00:15)
+            if train_mins < now_mins - 240:
+                train_mins += 1440 # Přidáme 24 hodin v minutách
+                
+            return train_mins
         except:
-            return 9999 # Fallback pro jistotu
+            return 9999 # Fallback na konec seznamu pro jistotu
 
     combined_trains.sort(key=sort_key)
 
