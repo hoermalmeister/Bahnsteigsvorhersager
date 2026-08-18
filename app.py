@@ -65,9 +65,6 @@ def index():
 
 @app.route('/api/board')
 def get_board():
-    """
-    Stáhne aktuální data z ČD, spočítá predikce a vrátí JSON pro frontend.
-    """
     url = "https://www.cd.cz/stanice/5433295/getopt"
     headers = {
         "Accept": "*/*",
@@ -78,10 +75,42 @@ def get_board():
     }
     
     try:
-        response = requests.post(url, headers=headers, data="language=cs&isDeep=true&toHistory=false")
-        live_data = response.json().get('Trains', [])
+        # 1. Stažení odjezdů
+        resp_dep = requests.post(url, headers=headers, data="language=cs&isDeep=true&toHistory=false")
+        deps = resp_dep.json().get('Trains', [])
+        
+        # 2. Stažení příjezdů
+        resp_arr = requests.post(url, headers=headers, data="language=cs&isDeep=false&toHistory=false")
+        arrs = resp_arr.json().get('Trains', [])
     except Exception as e:
         return jsonify({"error": "Nelze načíst živá data"}), 500
+
+    # 3. Filtrace: Vytvoříme si množinu čísel vlaků na odjezdu pro bleskové vyhledávání
+    dep_numbers = {str(t.get('TrainNumber', '')) for t in deps}
+    combined_trains = deps.copy()
+    
+    # Projdeme příjezdy a přidáme jen ty končící
+    for t in arrs:
+        t_num = str(t.get('TrainNumber', ''))
+        if t_num not in dep_numbers:
+            # Přepíšeme cíl na "Ze směru", protože ČD v Destination posílá výchozí stanici
+            t['Destination'] = f"Ze směru: {t.get('Destination', '')}"
+            combined_trains.append(t)
+            
+    # 4. Chytré seřazení podle času (ošetření půlnoci)
+    current_hour = datetime.now().hour
+    def sort_key(train):
+        time_str = train.get('DT', '00:00')
+        try:
+            h, m = map(int, time_str.split(':'))
+            # Pokud je večer (po 20:00) a vlak jede až po půlnoci (0-3 h), přidáme mu virtuálně 24 hodin
+            if current_hour > 20 and h < 4:
+                h += 24
+            return h * 60 + m
+        except:
+            return 9999 # Fallback pro jistotu
+
+    combined_trains.sort(key=sort_key)
 
     current_dow = datetime.now().weekday()
     board = []
@@ -90,7 +119,7 @@ def get_board():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        for train in live_data:
+        for train in combined_trains:
             t_num = str(train.get('TrainNumber', ''))
             t_type = train.get('Type', '')
             platform_raw = train.get('StandAndTrackBox', '')
