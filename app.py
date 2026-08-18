@@ -2,7 +2,7 @@ import os
 import requests
 import psycopg2
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, render_template, jsonify
 
 app = Flask(__name__)
@@ -98,22 +98,33 @@ def get_board():
             t['Destination'] = f"Ze směru: {t.get('Destination', '')}"
             combined_trains.append(t)
             
-    # 4. Sloučení obou seřazených seznamů pomocí absolutního času od ČD
+    # 4. Sloučení obou seznamů s ohledem na absolutní čas a aktuální zpoždění
     def sort_key(train):
         url = train.get('URL', '')
         time_str = train.get('DT', '00:00')
         
-        # Vytáhneme datum přímo z URL (např. "18.8.2026")
+        # Bezpečné načtení zpoždění (pokud chybí, je 0)
+        try:
+            delay_mins = int(train.get('Delay', 0))
+        except (ValueError, TypeError):
+            delay_mins = 0
+            
+        # Vytáhneme datum přímo z URL
         match = re.search(r'/(\d{1,2}\.\d{1,2}\.\d{4})/', url)
         if match:
             date_str = match.group(1)
             try:
-                # Spojíme datum a čas do jednoho objektu, podle kterého se to 100% správně seřadí
-                return datetime.strptime(f"{date_str} {time_str}", "%d.%m.%Y %H:%M")
+                # 1. Vytvoříme přesný plánovaný čas
+                planned_time = datetime.strptime(f"{date_str} {time_str}", "%d.%m.%Y %H:%M")
+                
+                # 2. Přičteme zpoždění a získáme reálný čas příjezdu/odjezdu
+                actual_time = planned_time + timedelta(minutes=delay_mins)
+                
+                return actual_time
             except ValueError:
                 pass
                 
-        # Pokud by URL výjimečně chybělo, dáme ho nakonec
+        # Fallback
         return datetime.max 
 
     combined_trains.sort(key=sort_key)
