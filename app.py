@@ -1,8 +1,7 @@
 import os
 import requests
 import psycopg2
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import datetime
 from flask import Flask, render_template, jsonify
 
 app = Flask(__name__)
@@ -98,27 +97,39 @@ def get_board():
             t['Destination'] = f"Ze směru: {t.get('Destination', '')}"
             combined_trains.append(t)
             
-    # 4. Chytré seřazení podle času (s ošetřením časového pásma a půlnoci)
-    prague_tz = ZoneInfo("Europe/Prague")
-    now = datetime.now(prague_tz)
-
-    def sort_key(train):
-        time_str = train.get('DT', '')
+    # 4. Chytré seřazení bez závislosti na čase serveru (relativní posun)
+    if combined_trains:
+        # Zcela ignorujeme čas serveru. Jako kotvu vezmeme čas prvního vlaku,
+        # který nám vrátilo API (to ho vrací v lokálním českém čase).
+        anchor_str = combined_trains[0].get('DT', '00:00')
         try:
-            h, m = map(int, time_str.split(':'))
-            # Vytvoříme přesný čas vlaku v dnešním dni podle pražského času
-            train_time = now.replace(hour=h, minute=m, second=0, microsecond=0)
-            
-            # Pokud je čas vlaku o více než 4 hodiny v minulosti oproti aktuálnímu času, 
-            # logicky to znamená, že vlak přejíždí přes půlnoc do zítřka.
-            if train_time < now - timedelta(hours=4):
-                train_time += timedelta(days=1)
-                
-            return train_time
-        except Exception:
-            return now + timedelta(days=365) # Pokud chybí čas, hodíme vlak na konec
+            ah, am = map(int, anchor_str.split(':'))
+            anchor_mins = ah * 60 + am
+        except:
+            anchor_mins = 0
 
-    combined_trains.sort(key=sort_key)
+        def sort_key(train):
+            time_str = train.get('DT', '')
+            try:
+                h, m = map(int, time_str.split(':'))
+                train_mins = h * 60 + m
+                
+                # Spočítáme rozdíl v minutách oproti našemu prvnímu vlaku
+                diff = train_mins - anchor_mins
+                
+                # Pokud je vlak o více než 12 hodin (720 min) matematicky "pozadu",
+                # ve skutečnosti se přehoupl přes půlnoc do zítřka (přičteme den)
+                if diff < -720:
+                    diff += 1440
+                # Pokud je naopak o 12 hodin "napřed", je to včerejší zpožděný vlak
+                elif diff > 720:
+                    diff -= 1440
+                    
+                return diff
+            except:
+                return 9999
+
+        combined_trains.sort(key=sort_key)
 
     current_dow = datetime.now().weekday()
     board = []
