@@ -1,4 +1,4 @@
-name: Vlaky - Sběr dat (každých 3 minut)
+name: Vlaky - Sběr dat
 
 on:
   workflow_dispatch:
