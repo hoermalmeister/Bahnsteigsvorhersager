@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chytrá Tabule - Brno hl. n.</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; }
+        h1 { text-align: center; color: #004a8f; }
+        table { width: 100%; max-width: 1000px; margin: 0 auto; border-collapse: collapse; background: #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #004a8f; color: white; }
+        tr:hover { background-color: #f1f1f1; }
+        .delay { color: #d9534f; font-weight: bold; }
+        .platform { font-size: 1.2em; font-weight: bold; color: #333; }
+        
+        /* Styly pro predikce */
+        .badge { display: inline-block; padding: 5px 10px; border-radius: 4px; font-size: 0.85em; margin-top: 5px; }
+        .pred-new { background-color: #e2e3e5; color: #333; border: 1px solid #ccc; }
+        .pred-stay { background-color: #dff0d8; color: #3c763d; border: 1px solid #d6e9c6; }
+        .pred-change { background-color: #fcf8e3; color: #8a6d3b; border: 1px solid #faebcc; margin-top: 2px;}
+    </style>
+</head>
+<body>
+
+    <h1>Brno hl. n. - Odjezdy & Predikce Nástupišť</h1>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Čas</th>
+                <th>Vlak</th>
+                <th>Cíl</th>
+                <th>Nástupiště (Živě)</th>
+                <th>Predikce spolehlivosti / Očekávání</th>
+            </tr>
+        </thead>
+        <tbody id="board-body">
+            <tr><td colspan="5" style="text-align:center;">Načítám data z API...</td></tr>
+        </tbody>
+    </table>
+
+    <script>
+        async function loadBoard() {
+            try {
+                const response = await fetch('/api/board');
+                const trains = await response.json();
+                const tbody = document.getElementById('board-body');
+                tbody.innerHTML = '';
+
+                trains.forEach(train => {
+                    let delayHtml = train.delay > 0 ? `<br><span class="delay">+${train.delay} min</span>` : '';
+                    let platformHtml = train.live_platform ? `<span class="platform">${train.live_platform}</span>` : '<em>Čeká</em>';
+                    
+                    let predHtml = '';
+                    const pred = train.prediction;
+
+                    if (pred.status === 'no_data') {
+                        predHtml = '<span style="color: #999; font-size:0.9em;">Sbíráme data...</span>';
+                    } 
+                    else if (pred.status === 'predict_new') {
+                        // Vlak nemá nástupiště - ukazujeme pravděpodobnosti ze stejného dne v týdnu
+                        pred.options.forEach(opt => {
+                            predHtml += `<div class="badge pred-new">Nástupiště ${opt.platform}: <strong>${opt.probability}%</strong></div><br>`;
+                        });
+                    } 
+                    else if (pred.status === 'predict_change') {
+                        // Vlak MÁ nástupiště - ukazujeme stabilitu a riziko změny
+                        predHtml += `<div class="badge pred-stay">Zůstane zde na <strong>${pred.stay_probability}%</strong></div>`;
+                        
+                        if (pred.changes && pred.changes.length > 0) {
+                            pred.changes.forEach(change => {
+                                predHtml += `<br><div class="badge pred-change">Riziko přesunu na ${change.platform}: <strong>${change.probability}%</strong></div>`;
+                            });
+                        }
+                    }
+
+                    const row = `
+                        <tr>
+                            <td>${train.time} ${delayHtml}</td>
+                            <td><strong>${train.type} ${train.number}</strong></td>
+                            <td>${train.destination}</td>
+                            <td>${platformHtml}</td>
+                            <td>${predHtml}</td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+            } catch (error) {
+                console.error("Chyba při načítání:", error);
+            }
+        }
+
+        // Načíst při spuštění a pak každou minutu
+        loadBoard();
+        setInterval(loadBoard, 60000);
+    </script>
+</body>
+</html>
