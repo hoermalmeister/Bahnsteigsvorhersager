@@ -1,6 +1,7 @@
 import os
 import requests
 import psycopg2
+import sys
 from datetime import datetime
 
 # Načtení hesla do databáze z GitHub Secrets
@@ -125,3 +126,4 @@ if __name__ == "__main__":
         fetch_and_save_data()
     except Exception as e:
         print(f"Kritická chyba: {e}")
+        sys.exit(1)
