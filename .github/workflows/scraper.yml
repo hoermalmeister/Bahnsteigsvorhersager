@@ -1,8 +1,6 @@
 name: Vlaky - Sběr dat (každých 3 minut)
 
 on:
-  schedule:
-    - cron: '*/3 * * * *'
   workflow_dispatch:
 
 jobs:
