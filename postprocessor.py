@@ -28,7 +28,7 @@ def run_postprocessing():
     ''')
     
     # Určíme včerejší datum (abychom zpracovávali jen vlaky, které už jistě dojely)
-    yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    yesterday = (datetime.now() - timedelta(days=0)).strftime('%Y-%m-%d') //má být jednička
     print(f"Spouštím post-processing pro datum: {yesterday}")
 
     # 2. Načtení všech včerejších spojů ze surové tabulky
