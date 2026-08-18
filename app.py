@@ -1,6 +1,7 @@
 import os
 import requests
 import psycopg2
+import re
 from datetime import datetime
 from flask import Flask, render_template, jsonify
 
@@ -97,39 +98,25 @@ def get_board():
             t['Destination'] = f"Ze směru: {t.get('Destination', '')}"
             combined_trains.append(t)
             
-    # 4. Chytré seřazení bez závislosti na čase serveru (relativní posun)
-    if combined_trains:
-        # Zcela ignorujeme čas serveru. Jako kotvu vezmeme čas prvního vlaku,
-        # který nám vrátilo API (to ho vrací v lokálním českém čase).
-        anchor_str = combined_trains[0].get('DT', '00:00')
-        try:
-            ah, am = map(int, anchor_str.split(':'))
-            anchor_mins = ah * 60 + am
-        except:
-            anchor_mins = 0
-
-        def sort_key(train):
-            time_str = train.get('DT', '')
+    # 4. Sloučení obou seřazených seznamů pomocí absolutního času od ČD
+    def sort_key(train):
+        url = train.get('URL', '')
+        time_str = train.get('DT', '00:00')
+        
+        # Vytáhneme datum přímo z URL (např. "18.8.2026")
+        match = re.search(r'/(\d{1,2}\.\d{1,2}\.\d{4})/', url)
+        if match:
+            date_str = match.group(1)
             try:
-                h, m = map(int, time_str.split(':'))
-                train_mins = h * 60 + m
+                # Spojíme datum a čas do jednoho objektu, podle kterého se to 100% správně seřadí
+                return datetime.strptime(f"{date_str} {time_str}", "%d.%m.%Y %H:%M")
+            except ValueError:
+                pass
                 
-                # Spočítáme rozdíl v minutách oproti našemu prvnímu vlaku
-                diff = train_mins - anchor_mins
-                
-                # Pokud je vlak o více než 12 hodin (720 min) matematicky "pozadu",
-                # ve skutečnosti se přehoupl přes půlnoc do zítřka (přičteme den)
-                if diff < -720:
-                    diff += 1440
-                # Pokud je naopak o 12 hodin "napřed", je to včerejší zpožděný vlak
-                elif diff > 720:
-                    diff -= 1440
-                    
-                return diff
-            except:
-                return 9999
+        # Pokud by URL výjimečně chybělo, dáme ho nakonec
+        return datetime.max 
 
-        combined_trains.sort(key=sort_key)
+    combined_trains.sort(key=sort_key)
 
     current_dow = datetime.now().weekday()
     board = []
