@@ -1,0 +1,23 @@
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; }
+h1 { text-align: center; color: #004a8f; margin-bottom: 30px; }
+table { width: 100%; max-width: 1000px; margin: 0 auto; border-collapse: collapse; background: #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; }
+th, td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; vertical-align: middle; }
+th { background-color: #004a8f; color: white; text-transform: uppercase; font-size: 0.9em; letter-spacing: 1px; }
+tr:hover { background-color: #f8fbff; }
+
+.delay { color: #d9534f; font-weight: bold; font-size: 0.9em; }
+.train-name { font-size: 1.1em; }
+.destination { color: #555; }
+
+/* Obal pro všechny predikční půlkruhy u jednoho vlaku */
+.platforms-container { display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap; }
+
+/* Samotný budík */
+.gauge-wrapper { display: flex; flex-direction: column; align-items: center; width: 55px; }
+.gauge-svg { width: 100%; height: auto; overflow: visible; margin-bottom: 4px; }
+.platform-number { line-height: 1; margin-bottom: 2px; }
+.platform-prob { font-size: 0.65em; color: #888; font-weight: normal; }
+
+/* Styly pro tučné vs obyčejné nástupiště */
+.is-live { font-weight: 800; font-size: 1.6em; color: #000; }
+.is-pred { font-weight: 600; font-size: 1.2em; color: #666; }
