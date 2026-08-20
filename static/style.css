@@ -83,7 +83,7 @@ tr:hover { background-color: var(--table-hover); }
 /* Obal na text */
 .gauge-content {
     position: absolute;
-    bottom: -1; /* Text se hezky usadí dole v prázdném prostoru SVG boxu */
+    bottom: 0; /* Text se hezky usadí dole v prázdném prostoru SVG boxu */
     left: 0;
     right: 0;
     height: 100%;
@@ -93,7 +93,7 @@ tr:hover { background-color: var(--table-hover); }
     align-items: center;
 }
 
-.platform-number { line-height: 1; margin-bottom: 1px; }
+.platform-number { line-height: 1; margin-bottom: 2px; }
 .platform-prob { font-size: 0.65em; color: var(--text-muted); font-weight: 600; line-height: 1; }
 
 /* Typografie nástupišť */
