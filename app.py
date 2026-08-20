@@ -146,13 +146,12 @@ def api_board(station_key):
         t_num = str(train.get('TrainNumber', ''))
         t_name = train.get('TrainName', '')
         t_time = train.get('DT', '00:00')
+        raw_dest = train.get('Terminus', '') or train.get('Destination', '')
+        
         if train.get('_is_pure_arrival'):
-            # Vlak zde končí, vytáhneme odkud vyjel
-            origin = train.get('Start', '') or train.get('Origin', '') or train.get('StartStation', '')
-            t_dest = f"Ze směru: {origin}" if origin else "Příjezd"
+            t_dest = f"Ze směru: {raw_dest}" if raw_dest else "Příjezd"
         else:
-            # Vlak odsud odjíždí, ukážeme kam míří
-            t_dest = train.get('Terminus', '') or train.get('Destination', '')
+            t_dest = raw_dest
         
         platform_raw = train.get('StandAndTrackBox', '')
         live_platform = platform_raw.replace('Nást.', '').replace('kol.', '').replace(' ', '') if platform_raw else None
