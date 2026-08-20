@@ -1,9 +1,9 @@
 import os
+import re
 import requests
 import psycopg2
-import re
-from datetime import datetime, timedelta
 from flask import Flask, render_template, jsonify
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 DB_URL = os.environ.get('DATABASE_URL')
@@ -11,53 +11,82 @@ DB_URL = os.environ.get('DATABASE_URL')
 def get_db_connection():
     return psycopg2.connect(DB_URL)
 
-def calculate_prediction(cursor, train_number, current_platform, current_dow):
+def calculate_prediction(cursor, train_number, current_platform, today_str, is_weekend):
     """
-    Vypočítá pravděpodobnosti nástupišť na základě historických dat.
-    Maximální pravděpodobnost je zastropována na 99 %.
+    Nová vylepšená predikční logika s oddělením víkendů/prac. dnů 
+    a sledováním dispečerských změn (initial vs final).
     """
     if not current_platform:
-        # NENÍ NÁSTUPIŠTĚ: Porovnáváme pouze stejný den v týdnu
+        # 1. NENÍ NÁSTUPIŠTĚ: Pracovní dny vs. víkendy (bez dneška)
+        # 0 = pondělí ... 6 = neděle
+        days_tuple = (5, 6) if is_weekend else (0, 1, 2, 3, 4)
+        
         cursor.execute('''
             SELECT final_platform, COUNT(*) FROM train_history 
-            WHERE train_number = %s AND day_of_week = %s AND final_platform != ''
+            WHERE train_number = %s 
+              AND day_of_week IN %s 
+              AND date != %s 
+              AND final_platform != ''
             GROUP BY final_platform
-        ''', (train_number, current_dow))
-    else:
-        # JE NÁSTUPIŠTĚ: Porovnáváme jakýkoliv den v týdnu
-        cursor.execute('''
-            SELECT final_platform, COUNT(*) FROM train_history 
-            WHERE train_number = %s AND final_platform != ''
-            GROUP BY final_platform
-        ''', (train_number,))
+        ''', (train_number, days_tuple, today_str))
+        
+        history = cursor.fetchall()
+        if not history:
+            return {"status": "no_data"}
 
-    history = cursor.fetchall()
-    if not history:
-        return {"status": "no_data"}
+        total_records = sum(count for _, count in history)
+        predictions = []
+        for platform, count in history:
+            prob = int((count / total_records) * 100)
+            prob = min(prob, 99) 
+            predictions.append({"platform": platform, "probability": prob})
 
-    total_records = sum(count for _, count in history)
-    predictions = []
-
-    for platform, count in history:
-        # Výpočet s maximálním stropem 99 %
-        prob = int((count / total_records) * 100)
-        prob = min(prob, 99) 
-        predictions.append({"platform": platform, "probability": prob})
-
-    # Seřazení od největší pravděpodobnosti po nejmenší
-    predictions.sort(key=lambda x: x['probability'], reverse=True)
-
-    if not current_platform:
+        predictions.sort(key=lambda x: x['probability'], reverse=True)
         return {"status": "predict_new", "options": predictions}
+
     else:
-        # Rozdělení na to, zda na ohlášeném nástupišti zůstane, nebo se změní
-        stay_prob = next((p['probability'] for p in predictions if p['platform'] == current_platform), 0)
-        changes = [p for p in predictions if p['platform'] != current_platform]
+        # 2. JE NÁSTUPIŠTĚ: Analyzujeme stabilitu aktuálně hlášeného nástupiště (bez dneška, nehledě na dny v týdnu)
+        
+        # A) ÚSPĚCH: Kolikrát se z tohoto nástupiště nakonec reálně odjelo (final_platform)
+        cursor.execute('''
+            SELECT COUNT(*) FROM train_history 
+            WHERE train_number = %s 
+              AND final_platform = %s 
+              AND date != %s
+        ''', (train_number, current_platform, today_str))
+        success_count = cursor.fetchone()[0]
+
+        # B) SELHÁNÍ (Změna): Kolikrát dispečer zahlásil toto nástupiště jako první (initial), ale nakonec se odjelo jinam
+        cursor.execute('''
+            SELECT final_platform, COUNT(*) FROM train_history 
+            WHERE train_number = %s 
+              AND initial_platform = %s 
+              AND final_platform != %s 
+              AND final_platform != '' 
+              AND date != %s
+            GROUP BY final_platform
+        ''', (train_number, current_platform, current_platform, today_str))
+        changes = cursor.fetchall()
+
+        total_records = success_count + sum(count for _, count in changes)
+        
+        if total_records == 0:
+            return {"status": "no_data"}
+
+        stay_prob = min(int((success_count / total_records) * 100), 99)
+        
+        change_preds = []
+        for new_plat, count in changes:
+            prob = min(int((count / total_records) * 100), 99)
+            change_preds.append({"platform": new_plat, "probability": prob})
+            
+        change_preds.sort(key=lambda x: x['probability'], reverse=True)
+
         return {
             "status": "predict_change",
             "current": current_platform,
             "stay_probability": stay_prob,
-            "changes": changes
+            "changes": change_preds
         }
 
 @app.route('/')
@@ -76,60 +105,49 @@ def get_board():
     }
     
     try:
-        # 1. Stažení odjezdů
         resp_dep = requests.post(url, headers=headers, data="language=cs&isDeep=true&toHistory=false")
-        deps = resp_dep.json().get('Trains', [])
+        deps = resp_dep.json().get('Trains', [])[:30] # Vezmeme trochu víc, ať máme rezervu po filtraci
         
-        # 2. Stažení příjezdů
         resp_arr = requests.post(url, headers=headers, data="language=cs&isDeep=false&toHistory=false")
-        arrs = resp_arr.json().get('Trains', [])
+        arrs = resp_arr.json().get('Trains', [])[:30]
     except Exception as e:
         return jsonify({"error": "Nelze načíst živá data"}), 500
 
-    # 3. Filtrace: Vytvoříme si množinu čísel vlaků na odjezdu pro bleskové vyhledávání
+    # 1. Filtrace končících příjezdů
     dep_numbers = {str(t.get('TrainNumber', '')) for t in deps}
     combined_trains = deps.copy()
     
-    # Projdeme příjezdy a přidáme jen ty končící
     for t in arrs:
         t_num = str(t.get('TrainNumber', ''))
         if t_num not in dep_numbers:
-            # Přepíšeme cíl na "Ze směru", protože ČD v Destination posílá výchozí stanici
-            t['Destination'] = f"Ze směru: {t.get('Destination', '')}"
+            t['Destination'] = f"Ze směru: {t.get('Origin', t.get('StartStation', t.get('Destination', '')))}"
             combined_trains.append(t)
             
-    # 4. Sloučení obou seznamů s ohledem na absolutní čas a aktuální zpoždění
+    # 2. Řazení ČISTĚ podle plánovaného času (zpoždění ignorujeme, jak jsi požadoval)
     def sort_key(train):
-        url = train.get('URL', '')
+        t_url = train.get('URL', '')
         time_str = train.get('DT', '00:00')
         
-        # Bezpečné načtení zpoždění (pokud chybí, je 0)
-        try:
-            delay_mins = int(train.get('Delay', 0))
-        except (ValueError, TypeError):
-            delay_mins = 0
-            
-        # Vytáhneme datum přímo z URL
-        match = re.search(r'/(\d{1,2}\.\d{1,2}\.\d{4})/', url)
+        match = re.search(r'/(\d{1,2}\.\d{1,2}\.\d{4})/', t_url)
         if match:
             date_str = match.group(1)
             try:
-                # 1. Vytvoříme přesný plánovaný čas
-                planned_time = datetime.strptime(f"{date_str} {time_str}", "%d.%m.%Y %H:%M")
-                
-                # 2. Přičteme zpoždění a získáme reálný čas příjezdu/odjezdu
-                actual_time = planned_time + timedelta(minutes=delay_mins)
-                
-                return actual_time
+                # Žádné přičítání zpoždění – vloží se tam, kam patří podle grafikonu
+                return datetime.strptime(f"{date_str} {time_str}", "%d.%m.%Y %H:%M")
             except ValueError:
                 pass
-                
-        # Fallback
         return datetime.max 
 
     combined_trains.sort(key=sort_key)
+    
+    # 3. Odříznutí na max 20 vlaků, ať je tabule čistá
+    combined_trains = combined_trains[:20]
 
-    current_dow = datetime.now().weekday()
+    # Zjištění dneška a víkendu (přidáváme 2 hodiny pro simulaci pražského času na UTC serveru)
+    prague_now = datetime.utcnow() + timedelta(hours=2)
+    today_str = prague_now.strftime('%Y-%m-%d')
+    is_weekend = prague_now.weekday() >= 5
+    
     board = []
     
     try:
@@ -142,8 +160,8 @@ def get_board():
             platform_raw = train.get('StandAndTrackBox', '')
             platform = platform_raw.replace('Nást.', '').replace('kol.', '').replace(' ', '') if platform_raw else ''
             
-            # Získání predikce
-            prediction = calculate_prediction(cursor, t_num, platform, current_dow)
+            # Zavolání nové statistiky
+            prediction = calculate_prediction(cursor, t_num, platform, today_str, is_weekend)
             
             board.append({
                 "type": t_type,
@@ -162,5 +180,4 @@ def get_board():
     return jsonify(board)
 
 if __name__ == '__main__':
-    # V produkci se spouští jinak, toto je pro lokální testování
     app.run(debug=True, port=5000)
