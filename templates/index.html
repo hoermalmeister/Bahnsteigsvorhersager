@@ -30,7 +30,7 @@
             let pct = 0;
             let probText = '';
 
-            // 1. Osekání všech mezer z čísla nástupiště (např. "3 / 6" -> "3/6")
+            // Osekání všech mezer z čísla nástupiště (např. "3 / 6" -> "3/6")
             const cleanPlatform = platformText.replace(/\s+/g, '');
 
             if (probability !== null) {
@@ -43,24 +43,23 @@
 
             const textClass = isLive ? 'is-live' : 'is-pred';
             
-            // Matematika pro 1/3 kruhu (120°). Délka takového oblouku při poloměru 45 je přesně 94.25
-            const arcLength = 94.25;
+            // Nová matematika - menší průměr (poloměr 35). Délka oblouku je 81.
+            const arcLength = 81;
             const dashOffset = arcLength - ((arcLength * pct) / 100);
 
-            // Path d="..." je nyní roztažený plošší oblouk (od X=11 do X=89)
+            // viewBox je nyní protáhnutý do výšky (100 x 45)
+            // Oblouk končí ve výšce Y=24, takže pod ním vzniká volný prostor (21 bodů) pro usazení textu
             return `
                 <div class="gauge-wrapper">
-                    <!-- Zmenšená výška viewBoxu (z 50 na 40), aby to hezky lícovalo s plošším tvarem -->
-                    <svg viewBox="0 0 100 40" class="gauge-svg">
-                        <path d="M 11 35 A 45 45 0 0 1 89 35" fill="none" stroke="var(--gauge-empty)" stroke-width="6" stroke-linecap="round" />
-                        <path d="M 11 35 A 45 45 0 0 1 89 35" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round"
+                    <svg viewBox="0 0 100 45" class="gauge-svg">
+                        <path d="M 18 24 A 35 35 0 0 1 82 24" fill="none" stroke="var(--gauge-empty)" stroke-width="6" stroke-linecap="round" />
+                        <path d="M 18 24 A 35 35 0 0 1 82 24" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round"
                               stroke-dasharray="${arcLength}" stroke-dashoffset="${arcLength}"
                               style="transition: stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1);"
                               class="gauge-anim-path" data-target-offset="${dashOffset}" />
                     </svg>
                     
                     <div class="gauge-content">
-                        <!-- Výpis ořezaného čísla nástupiště -->
                         <div class="platform-number ${textClass}">${cleanPlatform}</div>
                         ${probText}
                     </div>
