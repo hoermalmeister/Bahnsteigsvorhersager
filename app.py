@@ -195,19 +195,23 @@ def api_board(station_key):
         try:
             h, m = map(int, t['time'].split(':'))
             
-            # Vytáhneme přesné datum z URL vlaku (např. 19.08.2024), přesně jako jsme to vymysleli minule
-            match = re.search(r'/(\d{1,2}\.\d{1,2}\.\d{4})/', t.get('url', ''))
+            # OPRAVA 1: Odebráno koncové lomítko, regex teď najde datum vždy
+            match = re.search(r'/(\d{1,2}\.\d{1,2}\.\d{4})', t.get('url', ''))
             if match:
                 date_str = match.group(1)
                 train_date = datetime.strptime(date_str, "%d.%m.%Y").date()
                 return now.replace(year=train_date.year, month=train_date.month, day=train_date.day, hour=h, minute=m, second=0, microsecond=0)
             
-            # Záchranná půlnoční korekce (kdyby URL datum z nějakého důvodu neobsahovala)
+            # OPRAVA 2: Rozšířená záchranná síť, pokud by API URL vůbec neposlalo
             dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
-            if now.hour > 20 and h < 4:
+            
+            # Pokud je teď večer (po 18:00) a vlak má jet ráno (do 12:00), je to 100% zítřejší vlak
+            if now.hour >= 18 and h <= 12:
                 dt += timedelta(days=1)
-            elif now.hour < 4 and h > 20:
+            # Pokud je teď po půlnoci (do 6:00) a vlak měl jet včera večer (po 18:00), je to zpožděný včerejší vlak
+            elif now.hour <= 6 and h >= 18:
                 dt -= timedelta(days=1)
+                
             return dt
         except Exception:
             return now
