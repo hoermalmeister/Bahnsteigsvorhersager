@@ -83,14 +83,33 @@ def fetch_and_save_data():
 
         # Trik: Uloží nový vlak, nebo updatuje existující. Pokud je nové nástupiště prázdné, nechá tam to staré!
         cursor.execute('''
-            INSERT INTO train_history (date, day_of_week, train_type, train_number, planned_time, final_platform, delay_minutes)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO train_history (date, day_of_week, train_type, train_number, planned_time, final_platform, initial_platform, delay_minutes)
+            VALUES (%s, %s, %s, %s, %s, %s, '', %s)
             ON CONFLICT (date, train_type, train_number) 
             DO UPDATE SET 
+                -- Logika pro initial_platform (Záznam první změny)
+                initial_platform = CASE
+                    -- 1. Pokud už initial_platform máme zapsané, nikdy ho nepřepisujeme (ignorujeme třetí a další změny)
+                    WHEN train_history.initial_platform != '' THEN train_history.initial_platform
+                    
+                    -- 2. Pokud přišlo NOVÉ nástupiště, my už nějaké STARÉ máme, a LIŠÍ SE... 
+                    -- tak to naše staré bezpečně uložíme do initial_platform.
+                    WHEN EXCLUDED.final_platform != '' 
+                         AND train_history.final_platform != '' 
+                         AND EXCLUDED.final_platform != train_history.final_platform 
+                    THEN train_history.final_platform
+                    
+                    -- 3. Jinak ho necháme prázdné
+                    ELSE train_history.initial_platform
+                END,
+                
+                -- Logika pro final_platform (Vždy drží to nejnovější)
                 final_platform = CASE 
                     WHEN EXCLUDED.final_platform != '' THEN EXCLUDED.final_platform 
                     ELSE train_history.final_platform 
                 END,
+                
+                -- Aktualizace zpoždění
                 delay_minutes = EXCLUDED.delay_minutes
         ''', (today_date, current_dow, t_type, t_num, t_time, platform, t_delay))
         
