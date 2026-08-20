@@ -30,35 +30,38 @@
             let pct = 0;
             let probText = '';
 
+            // 1. Osekání všech mezer z čísla nástupiště (např. "3 / 6" -> "3/6")
+            const cleanPlatform = platformText.replace(/\s+/g, '');
+
             if (probability !== null) {
                 pct = probability;
                 probText = `<div class="platform-prob">${pct}%</div>`;
-                if (pct >= 75) color = '#2ecc71';      // Zelená
-                else if (pct >= 50) color = '#f39c12'; // Oranžová
-                else color = '#e74c3c';                // Červená
+                if (pct >= 75) color = '#2ecc71';      
+                else if (pct >= 50) color = '#f39c12'; 
+                else color = '#e74c3c';                
             }
 
             const textClass = isLive ? 'is-live' : 'is-pred';
             
-            // Obvod celého kruhu o poloměru 40 je cca 251.3, půlkruh je přesně 125.66
-            const dashOffset = 125.66 - ((125.66 * pct) / 100);
+            // Matematika pro 1/3 kruhu (120°). Délka takového oblouku při poloměru 45 je přesně 94.25
+            const arcLength = 94.25;
+            const dashOffset = arcLength - ((arcLength * pct) / 100);
 
-            // Tloušťka linky je 6
+            // Path d="..." je nyní roztažený plošší oblouk (od X=11 do X=89)
             return `
                 <div class="gauge-wrapper">
-                    <svg viewBox="0 0 100 50" class="gauge-svg">
-                        <!-- Prázdný šedý základ -->
-                        <path d="M 10 47 A 40 40 0 0 1 90 47" fill="none" stroke="var(--gauge-empty)" stroke-width="6" stroke-linecap="round" />
-                        <!-- Barevná predikce -->
-                        <path d="M 10 47 A 40 40 0 0 1 90 47" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round"
-                              stroke-dasharray="125.66" stroke-dashoffset="125.66"
+                    <!-- Zmenšená výška viewBoxu (z 50 na 40), aby to hezky lícovalo s plošším tvarem -->
+                    <svg viewBox="0 0 100 40" class="gauge-svg">
+                        <path d="M 11 35 A 45 45 0 0 1 89 35" fill="none" stroke="var(--gauge-empty)" stroke-width="6" stroke-linecap="round" />
+                        <path d="M 11 35 A 45 45 0 0 1 89 35" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round"
+                              stroke-dasharray="${arcLength}" stroke-dashoffset="${arcLength}"
                               style="transition: stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1);"
                               class="gauge-anim-path" data-target-offset="${dashOffset}" />
                     </svg>
                     
-                    <!-- Text uvnitř budíku -->
                     <div class="gauge-content">
-                        <div class="platform-number ${textClass}">${platformText}</div>
+                        <!-- Výpis ořezaného čísla nástupiště -->
+                        <div class="platform-number ${textClass}">${cleanPlatform}</div>
                         ${probText}
                     </div>
                 </div>
