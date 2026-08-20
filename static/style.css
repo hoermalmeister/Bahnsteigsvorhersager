@@ -1,23 +1,101 @@
-body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; }
-h1 { text-align: center; color: #004a8f; margin-bottom: 30px; }
-table { width: 100%; max-width: 1000px; margin: 0 auto; border-collapse: collapse; background: #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; }
-th, td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; vertical-align: middle; }
-th { background-color: #004a8f; color: white; text-transform: uppercase; font-size: 0.9em; letter-spacing: 1px; }
-tr:hover { background-color: #f8fbff; }
+/* ZÁKLADNÍ BARVY (Světly režim) */
+:root {
+    --bg-color: #f4f7f6;
+    --card-bg: #ffffff;
+    --text-main: #222222;
+    --text-muted: #666666;
+    --table-border: #eeeeee;
+    --table-hover: #f8fbff;
+    --header-bg: #004a8f;
+    --header-text: #ffffff;
+    --gauge-empty: #e2e3e5;
+    --gauge-text-live: #000000;
+    --gauge-text-pred: #777777;
+    --delay-color: #d9534f;
+}
 
-.delay { color: #d9534f; font-weight: bold; font-size: 0.9em; }
-.train-name { font-size: 1.1em; }
-.destination { color: #555; }
+/* TMAVÝ REŽIM (Automaticky se zapne, pokud to má uživatel v systému) */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-color: #121212;
+        --card-bg: #1e1e1e;
+        --text-main: #e0e0e0;
+        --text-muted: #aaaaaa;
+        --table-border: #2c2c2c;
+        --table-hover: #252b30;
+        --header-bg: #153b6b; /* Tlumenější modrá pro oči */
+        --header-text: #e0e0e0;
+        --gauge-empty: #333333;
+        --gauge-text-live: #ffffff; /* Bílé tučné nástupiště ve tmě */
+        --gauge-text-pred: #999999;
+        --delay-color: #ff6b6b;
+    }
+}
 
-/* Obal pro všechny predikční půlkruhy u jednoho vlaku */
-.platforms-container { display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap; }
+body { 
+    /* Dopravní fonty: Bahnschrift pro Windows, DIN pro profi monitory, Roboto jako fallback */
+    font-family: 'Bahnschrift', 'DIN Pro', 'Roboto', 'Segoe UI', sans-serif; 
+    background-color: var(--bg-color); 
+    color: var(--text-main); 
+    margin: 0; 
+    padding: 20px; 
+    transition: background-color 0.3s, color 0.3s; /* Plynulý přechod při změně režimu */
+}
 
-/* Samotný budík */
-.gauge-wrapper { display: flex; flex-direction: column; align-items: center; width: 55px; }
-.gauge-svg { width: 100%; height: auto; overflow: visible; margin-bottom: 4px; }
+h1 { text-align: center; color: var(--header-bg); margin-bottom: 30px; font-weight: 600;}
+
+table { 
+    width: 100%; 
+    max-width: 1000px; 
+    margin: 0 auto; 
+    border-collapse: collapse; 
+    background: var(--card-bg); 
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1); 
+    border-radius: 8px; 
+    overflow: hidden; 
+}
+
+th, td { padding: 15px; text-align: left; border-bottom: 1px solid var(--table-border); vertical-align: middle; }
+th { background-color: var(--header-bg); color: var(--header-text); text-transform: uppercase; font-size: 0.9em; letter-spacing: 1px; }
+tr:hover { background-color: var(--table-hover); }
+
+.delay { color: var(--delay-color); font-weight: bold; font-size: 0.95em; }
+.train-name { font-size: 1.15em; letter-spacing: 0.5px; }
+.destination { color: var(--text-muted); font-size: 1.05em; }
+
+/* Obal pro všechny budíky jednoho vlaku */
+.platforms-container { display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; }
+
+/* SAMOTNÝ BUDÍK (Gauge Chart) */
+.gauge-wrapper { 
+    position: relative; /* Abychom do něj mohli text umístit absolutně */
+    width: 65px; 
+    display: inline-block;
+}
+
+.gauge-svg { 
+    width: 100%; 
+    height: auto; 
+    display: block; 
+}
+
+/* Obal na text, který sedí přesně UVNITŘ půlkruhu */
+.gauge-content {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end; /* Přimáčkne text k dolní rovině půlkruhu */
+    align-items: center;
+    padding-bottom: 2px; /* Mírné odskočení od spodní linky */
+}
+
 .platform-number { line-height: 1; margin-bottom: 2px; }
-.platform-prob { font-size: 0.65em; color: #888; font-weight: normal; }
+.platform-prob { font-size: 0.65em; color: var(--text-muted); font-weight: 600; }
 
-/* Styly pro tučné vs obyčejné nástupiště */
-.is-live { font-weight: 800; font-size: 1.6em; color: #000; }
-.is-pred { font-weight: 600; font-size: 1.2em; color: #666; }
+/* Typografie nástupišť */
+.is-live { font-weight: 700; font-size: 1.5em; color: var(--gauge-text-live); }
+.is-pred { font-weight: 400; font-size: 1.25em; color: var(--gauge-text-pred); }
