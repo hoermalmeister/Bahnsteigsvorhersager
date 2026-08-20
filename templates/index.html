@@ -43,18 +43,16 @@
 
             const textClass = isLive ? 'is-live' : 'is-pred';
             
-            // Zlatá střední cesta: Větší průměr (poloměr 40) pro mírně širší rozkročení.
-            // Spočítaná nová délka tohoto specifického oblouku je zhruba 90.
-            const arcLength = 90;
+            // Pro poloměr 41 je přesná délka tohoto výseku cca 92
+            const arcLength = 92;
             const dashOffset = arcLength - ((arcLength * pct) / 100);
 
-            // Výška plátna (60) i pozice Y (28) zůstávají, aby byl text usazený přesně tam co minule.
-            // Jen křivka se vrací k hezčímu širšímu tvaru M 14 ... 86.
+            // Úprava bodů X z 14 na 13 (vlevo) a z 86 na 87 (vpravo), poloměr nastaven na 41
             return `
                 <div class="gauge-wrapper">
                     <svg viewBox="0 0 100 60" class="gauge-svg">
-                        <path d="M 14 28 A 40 40 0 0 1 86 28" fill="none" stroke="var(--gauge-empty)" stroke-width="6" stroke-linecap="round" />
-                        <path d="M 14 28 A 40 40 0 0 1 86 28" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round"
+                        <path d="M 13 28 A 41 41 0 0 1 87 28" fill="none" stroke="var(--gauge-empty)" stroke-width="6" stroke-linecap="round" />
+                        <path d="M 13 28 A 41 41 0 0 1 87 28" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round"
                               stroke-dasharray="${arcLength}" stroke-dashoffset="${arcLength}"
                               style="transition: stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1);"
                               class="gauge-anim-path" data-target-offset="${dashOffset}" />
