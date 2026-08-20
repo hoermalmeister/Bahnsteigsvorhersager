@@ -10,9 +10,9 @@ import time
 DB_URL = os.environ.get('DATABASE_URL')
 
 STATIONS = {
-    "praha": {"id": "5457076", "slug": "praha-hln"},
-    "brno": {"id": "5433295", "slug": "brno-hln"},
-    "olomouc": {"id": "5434362", "slug": "olomouc-hln"}
+    "praha": {"id": "5457076", "slug": "praha-hl-n-"},
+    "brno": {"id": "5433295", "slug": "brno-hl-n-"},
+    "olomouc": {"id": "5434362", "slug": "olomouc-hl-n-"}
 }
 
 def init_db(cursor):
