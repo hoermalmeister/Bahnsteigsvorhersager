@@ -55,34 +55,31 @@ def station_board(station_key):
     station_name = STATIONS[station_key]['name']
     return render_template('index.html', station_key=station_key, station_name=station_name)
 
-@app.route('/api/board/<station_key>')
-def api_board(station_key):
-    if station_key not in STATIONS:
-        return jsonify({"error": "Neznámá stanice"}), 404
-        
-    station_id = STATIONS[station_key]['id']
-    slug = STATIONS[station_key]['slug']
-    table_name = f"history_{station_key}"
-    
-    prague_tz = ZoneInfo("Europe/Prague")
-    now = datetime.now(prague_tz)
-    
-    headers = {
+headers = {
         "Accept": "*/*",
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Referer": f"https://www.cd.cz/stanice/{slug}/{station_id}"
+        "Referer": f"https://www.cd.cz/stanice/{station_id}"
     }
-    url = f"https://www.cd.cz/stanice/{slug}/{station_id}/getopt"
+    
+    # URL už obsahuje pouze ID, žádné textové názvy, na které je server citlivý
+    url = f"https://www.cd.cz/stanice/{station_id}/getopt"
     
     try:
         resp_dep = requests.post(url, headers=headers, data="language=cs&isDeep=true&toHistory=false", timeout=5)
+        
+        # Záchranná brzda: Pokud nám Dráhy nevrátí stav 200 OK, rovnou vyhodíme srozumitelnou chybu
+        if resp_dep.status_code != 200:
+            return jsonify({"error": f"ČD API vrátilo chybu {resp_dep.status_code}"}), 500
+            
         deps = resp_dep.json().get('Trains', [])[:60]
         
         resp_arr = requests.post(url, headers=headers, data="language=cs&isDeep=false&toHistory=false", timeout=5)
         arrs = resp_arr.json().get('Trains', [])[:60]
+        
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # Pokud nevrátí platný JSON, vypíšeme to čistě do konzole webu
+        return jsonify({"error": f"Chyba komunikace s ČD: {str(e)}"}), 500
 
     dep_numbers = {str(t.get('TrainNumber', '')) for t in deps}
     live_data = deps.copy()
