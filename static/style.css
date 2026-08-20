@@ -68,8 +68,8 @@ tr:hover { background-color: var(--table-hover); }
 
 /* SAMOTNÝ BUDÍK (Gauge Chart) */
 .gauge-wrapper { 
-    position: relative; /* Abychom do něj mohli text umístit absolutně */
-    width: 65px; 
+    position: relative; 
+    width: 75px; /* Mírně rozšířeno (z 65px), aby se vešlo i "3 / 6" */
     display: inline-block;
 }
 
@@ -79,7 +79,7 @@ tr:hover { background-color: var(--table-hover); }
     display: block; 
 }
 
-/* Obal na text, který sedí přesně UVNITŘ půlkruhu */
+/* Obal na text, který ho usadí přesně do středu oblouku */
 .gauge-content {
     position: absolute;
     bottom: 0;
@@ -88,13 +88,17 @@ tr:hover { background-color: var(--table-hover); }
     height: 100%;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end; /* Přimáčkne text k dolní rovině půlkruhu */
+    justify-content: flex-end; 
     align-items: center;
-    padding-bottom: 2px; /* Mírné odskočení od spodní linky */
+    padding-bottom: 2px; /* Jemné usazení nad spodní linku */
 }
 
 .platform-number { line-height: 1; margin-bottom: 2px; }
-.platform-prob { font-size: 0.65em; color: var(--text-muted); font-weight: 600; }
+.platform-prob { font-size: 0.65em; color: var(--text-muted); font-weight: 600; line-height: 1; }
+
+/* Typografie nástupišť - přizpůsobená tenčímu kruhu */
+.is-live { font-weight: 700; font-size: 1.35em; color: var(--gauge-text-live); }
+.is-pred { font-weight: 500; font-size: 1.15em; color: var(--gauge-text-pred); }
 
 /* Typografie nástupišť */
 .is-live { font-weight: 700; font-size: 1.5em; color: var(--gauge-text-live); }
