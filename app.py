@@ -1,5 +1,4 @@
 import os
-import re
 from flask import Flask, render_template, jsonify, render_template_string
 import requests
 import psycopg2
@@ -10,23 +9,17 @@ from zoneinfo import ZoneInfo
 app = Flask(__name__)
 DB_URL = os.environ.get('DATABASE_URL')
 
-# Náš hlavní slovník stanic
 STATIONS = {
-    "praha": {"id": "5457076", "name": "Praha hl.n."},
-    "brno": {"id": "5433295", "name": "Brno hl.n."},
-    "liben": {"id": "5457223", "name": "Praha-Libeň"},
-    "olomouc": {"id": "5432296", "name": "Olomouc hl.n."},
-    "pardubice": {"id": "5453075", "name": "Pardubice hl.n."},
-    "prerov": {"id": "5432420", "name": "Přerov"}
+    "praha": {"id": "5457076", "slug": "praha-hln", "name": "Praha hl.n."},
+    "brno": {"id": "5433295", "slug": "brno-hln", "name": "Brno hl.n."},
+    "olomouc": {"id": "5434362", "slug": "olomouc-hln", "name": "Olomouc hl.n."}
 }
 
 def get_db_connection():
     return psycopg2.connect(DB_URL)
 
-# 1. Hlavní rozcestník (zobrazí se na čisté doméně)
 @app.route('/')
 def home():
-    # Vygenerujeme rychlý rozcestník bez nutnosti dalšího souboru
     html = """
     <!DOCTYPE html>
     <html lang="cs">
@@ -55,7 +48,6 @@ def home():
     """
     return render_template_string(html, stations=STATIONS)
 
-# 2. Stránka s tabulí pro konkrétní stanici
 @app.route('/<station_key>')
 def station_board(station_key):
     if station_key not in STATIONS:
@@ -63,13 +55,13 @@ def station_board(station_key):
     station_name = STATIONS[station_key]['name']
     return render_template('index.html', station_key=station_key, station_name=station_name)
 
-# 3. API pro konkrétní stanici
 @app.route('/api/board/<station_key>')
 def api_board(station_key):
     if station_key not in STATIONS:
         return jsonify({"error": "Neznámá stanice"}), 404
         
     station_id = STATIONS[station_key]['id']
+    slug = STATIONS[station_key]['slug']
     table_name = f"history_{station_key}"
     
     prague_tz = ZoneInfo("Europe/Prague")
@@ -79,12 +71,11 @@ def api_board(station_key):
         "Accept": "*/*",
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Referer": f"https://www.cd.cz/stanice/{station_id}"
+        "Referer": f"https://www.cd.cz/stanice/{slug}/{station_id}"
     }
-    url = f"https://www.cd.cz/stanice/{station_id}/getopt"
+    url = f"https://www.cd.cz/stanice/{slug}/{station_id}/getopt"
     
     try:
-        # Bereme 60 záznamů, abychom po osekání měli dostatek dat pro 40 řádků
         resp_dep = requests.post(url, headers=headers, data="language=cs&isDeep=true&toHistory=false", timeout=5)
         deps = resp_dep.json().get('Trains', [])[:60]
         
@@ -99,7 +90,6 @@ def api_board(station_key):
         if str(t.get('TrainNumber', '')) not in dep_numbers:
             live_data.append(t)
 
-    # 1. Zjistíme, jaké vlaky právě jedou, abychom se zeptali databáze jen na ně
     trains_to_query = []
     for t in live_data:
         trains_to_query.append((t.get('Type', ''), str(t.get('TrainNumber', ''))))
@@ -110,7 +100,6 @@ def api_board(station_key):
             conn = get_db_connection()
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             
-            # Parametrizovaný dotaz pro hromadné vyhledání (tabulka je dynamická)
             query = f"""
                 SELECT train_type, train_number, final_platform, COUNT(*) as count
                 FROM {table_name}
@@ -131,7 +120,6 @@ def api_board(station_key):
         except Exception as e:
             print("DB Error:", e)
 
-    # 2. Skládání výsledků
     combined_trains = []
     for train in live_data:
         t_type = train.get('Type', '')
@@ -148,7 +136,6 @@ def api_board(station_key):
         except:
             t_delay = 0
 
-        # Historická pravděpodobnost
         key = f"{t_type}_{t_num}"
         hist_records = history.get(key, [])
         
@@ -210,8 +197,6 @@ def api_board(station_key):
             return now
 
     combined_trains.sort(key=sort_key)
-    
-    # Odříznutí na max 40 vlaků
     return jsonify(combined_trains[:40])
 
 if __name__ == '__main__':
