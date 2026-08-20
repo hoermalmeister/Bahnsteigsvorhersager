@@ -31,7 +31,7 @@
             let pct = 0;
             let probText = '';
 
-            // Osekání všech mezer z čísla nástupiště (např. "3 / 6" -> "3/6")
+            // Osekání mezer (např. "3 / 6" -> "3/6")
             const cleanPlatform = platformText.replace(/\s+/g, '');
 
             if (probability !== null) {
@@ -44,29 +44,30 @@
 
             const textClass = isLive ? 'is-live' : 'is-pred';
             
-            // Pro poloměr 41 je přesná délka tohoto výseku cca 92
-            const arcLength = 92;
-            const dashOffset = arcLength - ((arcLength * pct) / 100);
+            // Délka rovné čáry v SVG plátně (od X=6 do X=94 je to přesně 88)
+            const lineLength = 88;
+            const dashOffset = lineLength - ((lineLength * pct) / 100);
 
-            // Úprava bodů X z 14 na 13 (vlevo) a z 86 na 87 (vpravo), poloměr nastaven na 41
+            // Čistý design: Číslo -> Čára -> Procenta
             return `
-                <div class="gauge-wrapper">
-                    <svg viewBox="0 0 100 60" class="gauge-svg">
-                        <path d="M 13 28 A 41 41 0 0 1 87 28" fill="none" stroke="var(--gauge-empty)" stroke-width="6" stroke-linecap="round" />
-                        <path d="M 13 28 A 41 41 0 0 1 87 28" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round"
-                              stroke-dasharray="${arcLength}" stroke-dashoffset="${arcLength}"
+                <div class="bar-wrapper">
+                    <div class="platform-number ${textClass}">${cleanPlatform}</div>
+                    
+                    <svg viewBox="0 0 100 12" class="bar-svg">
+                        <!-- Šedé pozadí čáry -->
+                        <line x1="6" y1="6" x2="94" y2="6" stroke="var(--gauge-empty)" stroke-width="8" stroke-linecap="round" />
+                        <!-- Barevná predikce (vykreslí se zleva doprava) -->
+                        <line x1="6" y1="6" x2="94" y2="6" stroke="${color}" stroke-width="8" stroke-linecap="round"
+                              stroke-dasharray="${lineLength}" stroke-dashoffset="${lineLength}"
                               style="transition: stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1);"
-                              class="gauge-anim-path" data-target-offset="${dashOffset}" />
+                              class="bar-anim-path" data-target-offset="${dashOffset}" />
                     </svg>
                     
-                    <div class="gauge-content">
-                        <div class="platform-number ${textClass}">${cleanPlatform}</div>
-                        ${probText}
-                    </div>
+                    ${probText}
                 </div>
             `;
         }
-        
+
         async function loadBoard() {
             try {
                 const response = await fetch('/api/board');
@@ -115,9 +116,9 @@
 
                 tbody.innerHTML = tableHtml;
 
-                // Spuštění animace budíků po narenderování DOMu
+                // Animace rovné čáry
                 setTimeout(() => {
-                    document.querySelectorAll('.gauge-anim-path').forEach(path => {
+                    document.querySelectorAll('.bar-anim-path').forEach(path => {
                         const targetOffset = path.getAttribute('data-target-offset');
                         path.style.strokeDashoffset = targetOffset;
                     });
