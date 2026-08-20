@@ -10,9 +10,9 @@ import time
 DB_URL = os.environ.get('DATABASE_URL')
 
 STATIONS = {
-    "praha": {"id": "5457076", "slug": "praha-hl-n-"},
-    "brno": {"id": "5433295", "slug": "brno-hl-n-"},
-    "olomouc": {"id": "5434362", "slug": "olomouc-hl-n-"}
+    "praha": {"id": "5457076", "name": "Praha hl.n."},
+    "brno": {"id": "5433295", "name": "Brno hl.n."},
+    "olomouc": {"id": "5434362", "name": "Olomouc hl.n."}
 }
 
 def init_db(cursor):
@@ -84,19 +84,25 @@ def fetch_and_save_data():
 
     for station_key, st in STATIONS.items():
         station_id = st["id"]
-        slug = st["slug"]
-        url = f"https://www.cd.cz/stanice/{slug}/{station_id}/getopt"
-        session.headers.update({"Referer": f"https://www.cd.cz/stanice/{slug}/{station_id}"})
+        
+        url = f"https://www.cd.cz/stanice/{station_id}/getopt"
+        session.headers.update({"Referer": f"https://www.cd.cz/stanice/{station_id}"})
         table_name = f"history_{station_key}"
 
         try:
             resp_dep = session.post(url, data="language=cs&isDeep=true&toHistory=false", timeout=10)
+            
+            if resp_dep.status_code != 200:
+                print(f"Chyba {resp_dep.status_code} - API pro {station_key} neodpovídá.")
+                continue
+                
             deps = resp_dep.json().get('Trains', [])
             
             resp_arr = session.post(url, data="language=cs&isDeep=false&toHistory=false", timeout=10)
             arrs = resp_arr.json().get('Trains', [])
+            
         except Exception as e:
-            print(f"Chyba při stahování dat pro {station_key}: {e}")
+            print(f"Chyba při stahování JSON dat pro {station_key}: {e}")
             continue
 
         dep_numbers = {str(t.get('TrainNumber', '')) for t in deps}
