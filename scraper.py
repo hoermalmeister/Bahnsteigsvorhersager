@@ -5,46 +5,53 @@ import requests
 import psycopg2
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+import time
 
 DB_URL = os.environ.get('DATABASE_URL')
 
+# "Slovník" stanic: Zkratka města -> ID na webu Českých drah
+STATIONS = {
+    "praha": "5457076",
+    "brno": "5433295",
+    "liben": "5457223",
+    "olomouc": "5432296",
+    "pardubice": "5453075",
+    "prerov": "5432420"
+}
+
 def init_db(cursor):
-    """Založí jednotnou tabulku pro historii (pokud neexistuje)"""
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS train_history (
-            id SERIAL PRIMARY KEY,
-            date VARCHAR(20),
-            day_of_week INTEGER,
-            train_type VARCHAR(50),
-            train_number VARCHAR(50),
-            planned_time VARCHAR(20),
-            final_platform VARCHAR(50),
-            initial_platform VARCHAR(50) DEFAULT '',
-            delay_minutes INTEGER,
-            UNIQUE(date, train_type, train_number)
-        )
-    ''')
+    # Pro jistotu zkontrolujeme, že tabulky existují, a pokud ne, skript si je vytvoří sám
+    for key in STATIONS.keys():
+        table_name = f"history_{key}"
+        cursor.execute(f'''
+            CREATE TABLE IF NOT EXISTS {table_name} (
+                id SERIAL PRIMARY KEY,
+                date VARCHAR(20),
+                day_of_week INTEGER,
+                train_type VARCHAR(50),
+                train_number VARCHAR(50),
+                planned_time VARCHAR(20),
+                final_platform VARCHAR(50),
+                initial_platform VARCHAR(50) DEFAULT '',
+                delay_minutes INTEGER,
+                UNIQUE(date, train_type, train_number)
+            )
+        ''')
 
 def get_train_date_and_dow(train, prague_now):
-    """Vytáhne přesné datum z URL vlaku, nebo chytře odhadne přesah přes půlnoc"""
     url = train.get('URL', '')
-    
-    # 1. Pokus o vytažení data přímo z URL (nejpřesnější)
     match = re.search(r'/(\d{1,2}\.\d{1,2}\.\d{4})/', url)
     if match:
         date_str = match.group(1)
         try:
-            # Převedeme např. "18.8.2026" na standardní "2026-08-18" a zjistíme den v týdnu
             train_dt = datetime.strptime(date_str, "%d.%m.%Y").date()
             return train_dt.strftime('%Y-%m-%d'), train_dt.weekday()
         except ValueError:
             pass
             
-    # 2. Fallback: Pokud URL selže, použijeme matematiku
     time_str = train.get('DT', '00:00')
     try:
         h, m = map(int, time_str.split(':'))
-        # Pokud je večer (po 20:00) a vlak jede v noci (0-4 h), je to zítra
         if prague_now.hour > 20 and h < 4:
             train_dt = prague_now.date() + timedelta(days=1)
         else:
@@ -52,7 +59,6 @@ def get_train_date_and_dow(train, prague_now):
         return train_dt.strftime('%Y-%m-%d'), train_dt.weekday()
     except:
         return prague_now.strftime('%Y-%m-%d'), prague_now.weekday()
-
 
 def fetch_and_save_data():
     if not DB_URL:
@@ -64,79 +70,84 @@ def fetch_and_save_data():
 
     prague_tz = ZoneInfo("Europe/Prague")
     now = datetime.now(prague_tz)
-
-    url = "https://www.cd.cz/stanice/5433295/getopt"
+    
     headers = {
         "Accept": "*/*",
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "X-Requested-With": "XMLHttpRequest",
-        "Referer": "https://www.cd.cz/stanice/brno-hl-n-/5433295"
+        "X-Requested-With": "XMLHttpRequest"
     }
 
-    print(f"[{now.strftime('%H:%M:%S')}] Spouštím API Českých drah...")
+    print(f"[{now.strftime('%H:%M:%S')}] Spouštím hromadný sběr pro {len(STATIONS)} stanic...")
+    total_processed = 0
 
-    try:
-        resp_dep = requests.post(url, headers=headers, data="language=cs&isDeep=true&toHistory=false")
-        deps = resp_dep.json().get('Trains', [])
-        
-        resp_arr = requests.post(url, headers=headers, data="language=cs&isDeep=false&toHistory=false")
-        arrs = resp_arr.json().get('Trains', [])
-    except Exception as e:
-        print(f"Chyba při stahování dat z API: {e}")
-        sys.exit(1)
+    # Skript oběhne jedno město po druhém
+    for station_key, station_id in STATIONS.items():
+        url = f"https://www.cd.cz/stanice/{station_id}/getopt"
+        headers["Referer"] = f"https://www.cd.cz/stanice/{station_id}"
+        table_name = f"history_{station_key}"
 
-    # Filtrace končících vlaků
-    dep_numbers = {str(t.get('TrainNumber', '')) for t in deps}
-    live_data = deps.copy()
-    
-    for t in arrs:
-        if str(t.get('TrainNumber', '')) not in dep_numbers:
-            live_data.append(t)
-
-    processed_count = 0
-
-    for train in live_data:
-        t_type = train.get('Type', '')
-        t_num = str(train.get('TrainNumber', ''))
-        t_time = train.get('DT', '')
-        
-        # Ošetření přesného data a dne v týdnu pro tento konkrétní vlak
-        t_date, t_dow = get_train_date_and_dow(train, now)
-        
         try:
-            t_delay = int(train.get('Delay', 0))
-        except:
-            t_delay = 0
+            resp_dep = requests.post(url, headers=headers, data="language=cs&isDeep=true&toHistory=false", timeout=10)
+            deps = resp_dep.json().get('Trains', [])
             
-        platform_raw = train.get('StandAndTrackBox', '')
-        platform = platform_raw.replace('Nást.', '').replace('kol.', '').replace(' ', '') if platform_raw else ''
+            resp_arr = requests.post(url, headers=headers, data="language=cs&isDeep=false&toHistory=false", timeout=10)
+            arrs = resp_arr.json().get('Trains', [])
+        except Exception as e:
+            print(f"Chyba při stahování dat pro {station_key}: {e}")
+            continue
 
-        cursor.execute('''
-            INSERT INTO train_history (date, day_of_week, train_type, train_number, planned_time, final_platform, initial_platform, delay_minutes)
-            VALUES (%s, %s, %s, %s, %s, %s, '', %s)
-            ON CONFLICT (date, train_type, train_number) 
-            DO UPDATE SET 
-                initial_platform = CASE
-                    WHEN train_history.initial_platform != '' THEN train_history.initial_platform
-                    WHEN EXCLUDED.final_platform != '' 
-                         AND train_history.final_platform != '' 
-                         AND EXCLUDED.final_platform != train_history.final_platform 
-                    THEN train_history.final_platform
-                    ELSE train_history.initial_platform
-                END,
-                final_platform = CASE 
-                    WHEN EXCLUDED.final_platform != '' THEN EXCLUDED.final_platform 
-                    ELSE train_history.final_platform 
-                END,
-                delay_minutes = EXCLUDED.delay_minutes
-        ''', (t_date, t_dow, t_type, t_num, t_time, platform, t_delay))
-        
-        processed_count += 1
+        dep_numbers = {str(t.get('TrainNumber', '')) for t in deps}
+        live_data = deps.copy()
+        for t in arrs:
+            if str(t.get('TrainNumber', '')) not in dep_numbers:
+                live_data.append(t)
+
+        station_processed = 0
+        for train in live_data:
+            t_type = train.get('Type', '')
+            t_num = str(train.get('TrainNumber', ''))
+            t_time = train.get('DT', '')
+            t_date, t_dow = get_train_date_and_dow(train, now)
+            
+            try:
+                t_delay = int(train.get('Delay', 0))
+            except:
+                t_delay = 0
+                
+            platform_raw = train.get('StandAndTrackBox', '')
+            platform = platform_raw.replace('Nást.', '').replace('kol.', '').replace(' ', '') if platform_raw else ''
+
+            # Dynamický zápis do konkrétní tabulky (např. history_praha)
+            cursor.execute(f'''
+                INSERT INTO {table_name} (date, day_of_week, train_type, train_number, planned_time, final_platform, initial_platform, delay_minutes)
+                VALUES (%s, %s, %s, %s, %s, %s, '', %s)
+                ON CONFLICT (date, train_type, train_number) 
+                DO UPDATE SET 
+                    initial_platform = CASE
+                        WHEN {table_name}.initial_platform != '' THEN {table_name}.initial_platform
+                        WHEN EXCLUDED.final_platform != '' 
+                             AND {table_name}.final_platform != '' 
+                             AND EXCLUDED.final_platform != {table_name}.final_platform 
+                        THEN {table_name}.final_platform
+                        ELSE {table_name}.initial_platform
+                    END,
+                    final_platform = CASE 
+                        WHEN EXCLUDED.final_platform != '' THEN EXCLUDED.final_platform 
+                        ELSE {table_name}.final_platform 
+                    END,
+                    delay_minutes = EXCLUDED.delay_minutes
+            ''', (t_date, t_dow, t_type, t_num, t_time, platform, t_delay))
+            
+            station_processed += 1
+            total_processed += 1
+
+        print(f" - {station_key.upper()} zpracováno: {station_processed} spojů.")
+        time.sleep(2) # Bezpečnostní pauza mezi městy, ať nás ČD nezablokují
 
     conn.commit()
     conn.close()
-    print(f"Hotovo. Zpracováno {processed_count} vlaků. Půlnoční spoje byly ošetřeny.")
+    print(f"Hotovo. Zpracováno celkem {total_processed} záznamů v síti.")
 
 if __name__ == "__main__":
     try:
