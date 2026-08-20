@@ -10,9 +10,9 @@ app = Flask(__name__)
 DB_URL = os.environ.get('DATABASE_URL')
 
 STATIONS = {
-    "praha": {"id": "5457076", "slug": "praha-hln", "name": "Praha hl.n."},
-    "brno": {"id": "5433295", "slug": "brno-hln", "name": "Brno hl.n."},
-    "olomouc": {"id": "5434362", "slug": "olomouc-hln", "name": "Olomouc hl.n."}
+    "praha": {"id": "5457076", "slug": "praha-hl-n-", "name": "Praha hl.n."},
+    "brno": {"id": "5433295", "slug": "brno-hl-n-", "name": "Brno hl.n."},
+    "olomouc": {"id": "5434362", "slug": "olomouc-hl-n-", "name": "Olomouc hl.n."}
 }
 
 def get_db_connection():
