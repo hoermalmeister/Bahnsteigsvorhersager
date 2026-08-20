@@ -106,10 +106,10 @@ def get_board():
     
     try:
         resp_dep = requests.post(url, headers=headers, data="language=cs&isDeep=true&toHistory=false")
-        deps = resp_dep.json().get('Trains', [])[:30] # Vezmeme trochu víc, ať máme rezervu po filtraci
+        deps = resp_dep.json().get('Trains', [])[:60] # Vezmeme trochu víc, ať máme rezervu po filtraci
         
         resp_arr = requests.post(url, headers=headers, data="language=cs&isDeep=false&toHistory=false")
-        arrs = resp_arr.json().get('Trains', [])[:30]
+        arrs = resp_arr.json().get('Trains', [])[:60]
     except Exception as e:
         return jsonify({"error": "Nelze načíst živá data"}), 500
 
@@ -141,7 +141,7 @@ def get_board():
     combined_trains.sort(key=sort_key)
     
     # 3. Odříznutí na max 20 vlaků, ať je tabule čistá
-    combined_trains = combined_trains[:20]
+    combined_trains = combined_trains[:40]
 
     # Zjištění dneška a víkendu (přidáváme 2 hodiny pro simulaci pražského času na UTC serveru)
     prague_now = datetime.utcnow() + timedelta(hours=2)
