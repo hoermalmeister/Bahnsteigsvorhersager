@@ -20,38 +20,47 @@
             </tr>
         </thead>
         <tbody id="board-body">
-            <tr><td colspan="4" style="text-align:center; padding: 40px; color: #888;">Načítám predikční model...</td></tr>
+            <tr><td colspan="4" style="text-align:center; padding: 40px; color: var(--text-muted);">Načítám predikční model...</td></tr>
         </tbody>
     </table>
 
     <script>
         function getGaugeHtml(platformText, probability, isLive) {
-            let color = '#e2e3e5'; 
+            let color = 'var(--gauge-empty)'; 
             let pct = 0;
             let probText = '';
 
             if (probability !== null) {
                 pct = probability;
                 probText = `<div class="platform-prob">${pct}%</div>`;
-                if (pct >= 75) color = '#2ecc71';      
-                else if (pct >= 50) color = '#f39c12'; 
-                else color = '#e74c3c';                
+                if (pct >= 75) color = '#2ecc71';      // Zelená
+                else if (pct >= 50) color = '#f39c12'; // Oranžová
+                else color = '#e74c3c';                // Červená
             }
 
             const textClass = isLive ? 'is-live' : 'is-pred';
+            
+            // Obvod celého kruhu o poloměru 40 je cca 251.3, půlkruh je přesně 125.66
             const dashOffset = 125.66 - ((125.66 * pct) / 100);
 
+            // Tloušťka linky je 12 (aby zbylo místo uvnitř pro text)
             return `
                 <div class="gauge-wrapper">
                     <svg viewBox="0 0 100 50" class="gauge-svg">
-                        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#e2e3e5" stroke-width="14" stroke-linecap="butt" />
-                        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="butt"
+                        <!-- Prázdný šedý základ (nyní se umí přebarvit i v Dark Mode) -->
+                        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="var(--gauge-empty)" stroke-width="12" stroke-linecap="butt" />
+                        <!-- Barevná predikce -->
+                        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="${color}" stroke-width="12" stroke-linecap="butt"
                               stroke-dasharray="125.66" stroke-dashoffset="125.66"
-                              style="transition: stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1) 0.1s;"
-                              onload="this.style.strokeDashoffset='${dashOffset}'" />
+                              style="transition: stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1);"
+                              class="gauge-anim-path" data-target-offset="${dashOffset}" />
                     </svg>
-                    <div class="platform-number ${textClass}">${platformText}</div>
-                    ${probText}
+                    
+                    <!-- Text uvnitř budíku -->
+                    <div class="gauge-content">
+                        <div class="platform-number ${textClass}">${platformText}</div>
+                        ${probText}
+                    </div>
                 </div>
             `;
         }
@@ -74,7 +83,6 @@
                             platformsHtml += getGaugeHtml(train.live_platform, null, true);
                         } else if (pred.status === 'predict_change') {
                             platformsHtml += getGaugeHtml(train.live_platform, pred.stay_probability, true);
-                            
                             if (pred.changes && pred.changes.length > 0) {
                                 pred.changes.forEach(change => {
                                     platformsHtml += getGaugeHtml(change.platform, change.probability, false);
@@ -105,16 +113,17 @@
 
                 tbody.innerHTML = tableHtml;
 
+                // Spuštění animace budíků po narenderování DOMu
                 setTimeout(() => {
-                    document.querySelectorAll('.gauge-svg path:nth-child(2)').forEach(path => {
-                        const targetOffset = path.getAttribute('onload').match(/'([^']+)'/)[1];
+                    document.querySelectorAll('.gauge-anim-path').forEach(path => {
+                        const targetOffset = path.getAttribute('data-target-offset');
                         path.style.strokeDashoffset = targetOffset;
                     });
                 }, 50);
 
             } catch (error) {
                 console.error("Chyba při načítání:", error);
-                document.getElementById('board-body').innerHTML = '<tr><td colspan="4" style="text-align:center; color:red;">Chyba připojení k serveru</td></tr>';
+                document.getElementById('board-body').innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--delay-color);">Chyba připojení k serveru</td></tr>';
             }
         }
 
