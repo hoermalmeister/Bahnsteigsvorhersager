@@ -69,8 +69,9 @@ tr:hover { background-color: var(--table-hover); }
 /* SAMOTNÝ BUDÍK (Gauge Chart) */
 .gauge-wrapper { 
     position: relative; 
-    width: 75px; /* Mírně rozšířeno (z 65px), aby se vešlo i "3 / 6" */
+    width: 65px; /* Kompaktnější, jelikož jsme odstranili mezery */
     display: inline-block;
+    margin-bottom: 6px; /* Rezerva pro text, který bude vysunutý níže */
 }
 
 .gauge-svg { 
@@ -79,10 +80,10 @@ tr:hover { background-color: var(--table-hover); }
     display: block; 
 }
 
-/* Obal na text, který ho usadí přesně do středu oblouku */
+/* Obal na text s novým usazením */
 .gauge-content {
     position: absolute;
-    bottom: 0;
+    bottom: -8px; /* TÍMTO se číslo posune mírně dolů pod úroveň klenby */
     left: 0;
     right: 0;
     height: 100%;
@@ -90,13 +91,12 @@ tr:hover { background-color: var(--table-hover); }
     flex-direction: column;
     justify-content: flex-end; 
     align-items: center;
-    padding-bottom: 2px; /* Jemné usazení nad spodní linku */
 }
 
 .platform-number { line-height: 1; margin-bottom: 2px; }
 .platform-prob { font-size: 0.65em; color: var(--text-muted); font-weight: 600; line-height: 1; }
 
-/* Typografie nástupišť - přizpůsobená tenčímu kruhu */
+/* Typografie nástupišť */
 .is-live { font-weight: 700; font-size: 1.35em; color: var(--gauge-text-live); }
 .is-pred { font-weight: 500; font-size: 1.15em; color: var(--gauge-text-pred); }
 
