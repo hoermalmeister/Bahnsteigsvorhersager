@@ -83,7 +83,7 @@ tr:hover { background-color: var(--table-hover); }
 /* Obal na text */
 .gauge-content {
     position: absolute;
-    bottom: 0; /* Text se hezky usadí dole v prázdném prostoru SVG boxu */
+    bottom: -1; /* Text se hezky usadí dole v prázdném prostoru SVG boxu */
     left: 0;
     right: 0;
     height: 100%;
