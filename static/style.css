@@ -66,39 +66,24 @@ tr:hover { background-color: var(--table-hover); }
 /* Obal pro všechny budíky jednoho vlaku */
 .platforms-container { display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; }
 
-/* SAMOTNÝ BUDÍK (Gauge Chart) */
-.gauge-wrapper { 
-    position: relative; 
-    width: 65px; 
-    display: inline-block;
-    /* Margin z minula je pryč, prostor nyní tvoří rovnou větší SVG viewBox */
+/* LINEÁRNÍ UKAZATEL (Bar Chart) */
+.bar-wrapper { 
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 46px; /* Kompaktní šířka pro zarovnání */
+    gap: 5px; /* Rovnoměrná mezera mezi číslem, čárou a procentem */
 }
 
-.gauge-svg { 
+.bar-svg { 
     width: 100%; 
     height: auto; 
     display: block; 
 }
 
-/* Obal na text */
-.gauge-content {
-    position: absolute;
-    bottom: 0; /* Text se hezky usadí dole v prázdném prostoru SVG boxu */
-    left: 0;
-    right: 0;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end; 
-    align-items: center;
-}
-
-.platform-number { line-height: 1; margin-bottom: 2px; }
+.platform-number { line-height: 1; }
 .platform-prob { font-size: 0.65em; color: var(--text-muted); font-weight: 600; line-height: 1; }
 
 /* Typografie nástupišť */
 .is-live { font-weight: 700; font-size: 1.35em; color: var(--gauge-text-live); }
 .is-pred { font-weight: 500; font-size: 1.15em; color: var(--gauge-text-pred); }
-/* Typografie nástupišť */
-.is-live { font-weight: 700; font-size: 1.5em; color: var(--gauge-text-live); }
-.is-pred { font-weight: 400; font-size: 1.25em; color: var(--gauge-text-pred); }
