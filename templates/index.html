@@ -43,14 +43,14 @@
             // Obvod celého kruhu o poloměru 40 je cca 251.3, půlkruh je přesně 125.66
             const dashOffset = 125.66 - ((125.66 * pct) / 100);
 
-            // Tloušťka linky je 12 (aby zbylo místo uvnitř pro text)
+            // Tloušťka linky je 6
             return `
                 <div class="gauge-wrapper">
                     <svg viewBox="0 0 100 50" class="gauge-svg">
-                        <!-- Prázdný šedý základ (nyní se umí přebarvit i v Dark Mode) -->
-                        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="var(--gauge-empty)" stroke-width="12" stroke-linecap="butt" />
+                        <!-- Prázdný šedý základ -->
+                        <path d="M 10 47 A 40 40 0 0 1 90 47" fill="none" stroke="var(--gauge-empty)" stroke-width="6" stroke-linecap="round" />
                         <!-- Barevná predikce -->
-                        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="${color}" stroke-width="12" stroke-linecap="butt"
+                        <path d="M 10 47 A 40 40 0 0 1 90 47" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round"
                               stroke-dasharray="125.66" stroke-dashoffset="125.66"
                               style="transition: stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1);"
                               class="gauge-anim-path" data-target-offset="${dashOffset}" />
