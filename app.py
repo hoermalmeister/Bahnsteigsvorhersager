@@ -77,9 +77,17 @@ def api_board(station_key):
         return jsonify({"error": f"Chyba komunikace s ČD: {str(e)}"}), 500
 
     dep_numbers = {str(t.get('TrainNumber', '')) for t in deps}
-    live_data = deps.copy()
+    live_data = []
+    
+    # Zpracování odjezdů (a projíždějících vlaků)
+    for t in deps:
+        t['_is_pure_arrival'] = False
+        live_data.append(t)
+        
+    # Zpracování čistých příjezdů (vlaky, co zde končí)
     for t in arrs:
         if str(t.get('TrainNumber', '')) not in dep_numbers:
+            t['_is_pure_arrival'] = True
             live_data.append(t)
 
     trains_to_query = []
@@ -138,7 +146,13 @@ def api_board(station_key):
         t_num = str(train.get('TrainNumber', ''))
         t_name = train.get('TrainName', '')
         t_time = train.get('DT', '00:00')
-        t_dest = train.get('Terminus', '') or train.get('Destination', '')
+        if train.get('_is_pure_arrival'):
+            # Vlak zde končí, vytáhneme odkud vyjel
+            origin = train.get('Start', '') or train.get('Origin', '') or train.get('StartStation', '')
+            t_dest = f"Ze směru: {origin}" if origin else "Příjezd"
+        else:
+            # Vlak odsud odjíždí, ukážeme kam míří
+            t_dest = train.get('Terminus', '') or train.get('Destination', '')
         
         platform_raw = train.get('StandAndTrackBox', '')
         live_platform = platform_raw.replace('Nást.', '').replace('kol.', '').replace(' ', '') if platform_raw else None
