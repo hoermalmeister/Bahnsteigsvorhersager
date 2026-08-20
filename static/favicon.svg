@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <style>
+    /* Výchozí barva: temně černá/grafitová */
+    .track { stroke: #111111; }
+    
+    /* Automatické přebarvení na bílou v tmavém prohlížeči */
+    @media (prefers-color-scheme: dark) {
+      .track { stroke: #ffffff; }
+    }
+  </style>
+
+  <!-- Pražce (horizontální linie) -->
+  <line x1="16" y1="25" x2="84" y2="25" class="track" stroke-width="10" stroke-linecap="round"/>
+  <line x1="16" y1="50" x2="84" y2="50" class="track" stroke-width="10" stroke-linecap="round"/>
+  <line x1="16" y1="75" x2="84" y2="75" class="track" stroke-width="10" stroke-linecap="round"/>
+
+  <!-- Kolejnice (vertikální, silnější linie) -->
+  <line x1="32" y1="12" x2="32" y2="88" class="track" stroke-width="14" stroke-linecap="round"/>
+  <line x1="68" y1="12" x2="68" y2="88" class="track" stroke-width="14" stroke-linecap="round"/>
+</svg>
