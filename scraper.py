@@ -9,18 +9,13 @@ import time
 
 DB_URL = os.environ.get('DATABASE_URL')
 
-# "Slovník" stanic: Zkratka města -> ID na webu Českých drah
 STATIONS = {
-    "praha": "5457076",
-    "brno": "5433295",
-    "liben": "5457223",
-    "olomouc": "5432296",
-    "pardubice": "5453075",
-    "prerov": "5432420"
+    "praha": {"id": "5457076", "slug": "praha-hln"},
+    "brno": {"id": "5433295", "slug": "brno-hln"},
+    "olomouc": {"id": "5434362", "slug": "olomouc-hln"}
 }
 
 def init_db(cursor):
-    # Pro jistotu zkontrolujeme, že tabulky existují, a pokud ne, skript si je vytvoří sám
     for key in STATIONS.keys():
         table_name = f"history_{key}"
         cursor.execute(f'''
@@ -71,27 +66,34 @@ def fetch_and_save_data():
     prague_tz = ZoneInfo("Europe/Prague")
     now = datetime.now(prague_tz)
     
-    headers = {
-        "Accept": "*/*",
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "X-Requested-With": "XMLHttpRequest"
-    }
+    })
+    
+    try:
+        session.get("https://www.cd.cz/", timeout=10)
+    except:
+        pass
 
     print(f"[{now.strftime('%H:%M:%S')}] Spouštím hromadný sběr pro {len(STATIONS)} stanic...")
     total_processed = 0
 
-    # Skript oběhne jedno město po druhém
-    for station_key, station_id in STATIONS.items():
-        url = f"https://www.cd.cz/stanice/{station_id}/getopt"
-        headers["Referer"] = f"https://www.cd.cz/stanice/{station_id}"
+    for station_key, st in STATIONS.items():
+        station_id = st["id"]
+        slug = st["slug"]
+        url = f"https://www.cd.cz/stanice/{slug}/{station_id}/getopt"
+        session.headers.update({"Referer": f"https://www.cd.cz/stanice/{slug}/{station_id}"})
         table_name = f"history_{station_key}"
 
         try:
-            resp_dep = requests.post(url, headers=headers, data="language=cs&isDeep=true&toHistory=false", timeout=10)
+            resp_dep = session.post(url, data="language=cs&isDeep=true&toHistory=false", timeout=10)
             deps = resp_dep.json().get('Trains', [])
             
-            resp_arr = requests.post(url, headers=headers, data="language=cs&isDeep=false&toHistory=false", timeout=10)
+            resp_arr = session.post(url, data="language=cs&isDeep=false&toHistory=false", timeout=10)
             arrs = resp_arr.json().get('Trains', [])
         except Exception as e:
             print(f"Chyba při stahování dat pro {station_key}: {e}")
@@ -118,7 +120,6 @@ def fetch_and_save_data():
             platform_raw = train.get('StandAndTrackBox', '')
             platform = platform_raw.replace('Nást.', '').replace('kol.', '').replace(' ', '') if platform_raw else ''
 
-            # Dynamický zápis do konkrétní tabulky (např. history_praha)
             cursor.execute(f'''
                 INSERT INTO {table_name} (date, day_of_week, train_type, train_number, planned_time, final_platform, initial_platform, delay_minutes)
                 VALUES (%s, %s, %s, %s, %s, %s, '', %s)
@@ -143,7 +144,7 @@ def fetch_and_save_data():
             total_processed += 1
 
         print(f" - {station_key.upper()} zpracováno: {station_processed} spojů.")
-        time.sleep(2) # Bezpečnostní pauza mezi městy, ať nás ČD nezablokují
+        time.sleep(2)
 
     conn.commit()
     conn.close()
