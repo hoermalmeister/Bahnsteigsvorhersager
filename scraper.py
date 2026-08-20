@@ -1,8 +1,9 @@
 import os
 import sys
+import re
 import requests
 import psycopg2
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 DB_URL = os.environ.get('DATABASE_URL')
@@ -18,10 +19,40 @@ def init_db(cursor):
             train_number VARCHAR(50),
             planned_time VARCHAR(20),
             final_platform VARCHAR(50),
+            initial_platform VARCHAR(50) DEFAULT '',
             delay_minutes INTEGER,
             UNIQUE(date, train_type, train_number)
         )
     ''')
+
+def get_train_date_and_dow(train, prague_now):
+    """Vytáhne přesné datum z URL vlaku, nebo chytře odhadne přesah přes půlnoc"""
+    url = train.get('URL', '')
+    
+    # 1. Pokus o vytažení data přímo z URL (nejpřesnější)
+    match = re.search(r'/(\d{1,2}\.\d{1,2}\.\d{4})/', url)
+    if match:
+        date_str = match.group(1)
+        try:
+            # Převedeme např. "18.8.2026" na standardní "2026-08-18" a zjistíme den v týdnu
+            train_dt = datetime.strptime(date_str, "%d.%m.%Y").date()
+            return train_dt.strftime('%Y-%m-%d'), train_dt.weekday()
+        except ValueError:
+            pass
+            
+    # 2. Fallback: Pokud URL selže, použijeme matematiku
+    time_str = train.get('DT', '00:00')
+    try:
+        h, m = map(int, time_str.split(':'))
+        # Pokud je večer (po 20:00) a vlak jede v noci (0-4 h), je to zítra
+        if prague_now.hour > 20 and h < 4:
+            train_dt = prague_now.date() + timedelta(days=1)
+        else:
+            train_dt = prague_now.date()
+        return train_dt.strftime('%Y-%m-%d'), train_dt.weekday()
+    except:
+        return prague_now.strftime('%Y-%m-%d'), prague_now.weekday()
+
 
 def fetch_and_save_data():
     if not DB_URL:
@@ -31,11 +62,8 @@ def fetch_and_save_data():
     cursor = conn.cursor()
     init_db(cursor)
 
-    # Správný pražský čas
     prague_tz = ZoneInfo("Europe/Prague")
     now = datetime.now(prague_tz)
-    today_date = now.strftime('%Y-%m-%d')
-    current_dow = now.weekday()
 
     url = "https://www.cd.cz/stanice/5433295/getopt"
     headers = {
@@ -73,6 +101,9 @@ def fetch_and_save_data():
         t_num = str(train.get('TrainNumber', ''))
         t_time = train.get('DT', '')
         
+        # Ošetření přesného data a dne v týdnu pro tento konkrétní vlak
+        t_date, t_dow = get_train_date_and_dow(train, now)
+        
         try:
             t_delay = int(train.get('Delay', 0))
         except:
@@ -81,43 +112,31 @@ def fetch_and_save_data():
         platform_raw = train.get('StandAndTrackBox', '')
         platform = platform_raw.replace('Nást.', '').replace('kol.', '').replace(' ', '') if platform_raw else ''
 
-        # Trik: Uloží nový vlak, nebo updatuje existující. Pokud je nové nástupiště prázdné, nechá tam to staré!
         cursor.execute('''
             INSERT INTO train_history (date, day_of_week, train_type, train_number, planned_time, final_platform, initial_platform, delay_minutes)
             VALUES (%s, %s, %s, %s, %s, %s, '', %s)
             ON CONFLICT (date, train_type, train_number) 
             DO UPDATE SET 
-                -- Logika pro initial_platform (Záznam první změny)
                 initial_platform = CASE
-                    -- 1. Pokud už initial_platform máme zapsané, nikdy ho nepřepisujeme (ignorujeme třetí a další změny)
                     WHEN train_history.initial_platform != '' THEN train_history.initial_platform
-                    
-                    -- 2. Pokud přišlo NOVÉ nástupiště, my už nějaké STARÉ máme, a LIŠÍ SE... 
-                    -- tak to naše staré bezpečně uložíme do initial_platform.
                     WHEN EXCLUDED.final_platform != '' 
                          AND train_history.final_platform != '' 
                          AND EXCLUDED.final_platform != train_history.final_platform 
                     THEN train_history.final_platform
-                    
-                    -- 3. Jinak ho necháme prázdné
                     ELSE train_history.initial_platform
                 END,
-                
-                -- Logika pro final_platform (Vždy drží to nejnovější)
                 final_platform = CASE 
                     WHEN EXCLUDED.final_platform != '' THEN EXCLUDED.final_platform 
                     ELSE train_history.final_platform 
                 END,
-                
-                -- Aktualizace zpoždění
                 delay_minutes = EXCLUDED.delay_minutes
-        ''', (today_date, current_dow, t_type, t_num, t_time, platform, t_delay))
+        ''', (t_date, t_dow, t_type, t_num, t_time, platform, t_delay))
         
         processed_count += 1
 
     conn.commit()
     conn.close()
-    print(f"Hotovo. Zpracováno {processed_count} vlaků do jednotné historie.")
+    print(f"Hotovo. Zpracováno {processed_count} vlaků. Půlnoční spoje byly ošetřeny.")
 
 if __name__ == "__main__":
     try:
