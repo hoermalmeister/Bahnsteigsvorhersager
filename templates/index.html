@@ -3,27 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bahnsteigsvorhersager Brno</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; }
-        h1 { text-align: center; color: #004a8f; }
-        table { width: 100%; max-width: 1000px; margin: 0 auto; border-collapse: collapse; background: #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
-        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background-color: #004a8f; color: white; }
-        tr:hover { background-color: #f1f1f1; }
-        .delay { color: #d9534f; font-weight: bold; }
-        .platform { font-size: 1.2em; font-weight: bold; color: #333; }
-        
-        /* Styly pro predikce */
-        .badge { display: inline-block; padding: 5px 10px; border-radius: 4px; font-size: 0.85em; margin-top: 5px; }
-        .pred-new { background-color: #e2e3e5; color: #333; border: 1px solid #ccc; }
-        .pred-stay { background-color: #dff0d8; color: #3c763d; border: 1px solid #d6e9c6; }
-        .pred-change { background-color: #fcf8e3; color: #8a6d3b; border: 1px solid #faebcc; margin-top: 2px;}
-    </style>
+    <title>Chytrá Tabule - Brno hl. n.</title>
+    <!-- Zde si Flask natáhne náš nový oddělený CSS soubor -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 
-    <h1>Bahnsteigsvorhersager - Brno hl. n.</h1>
+    <h1>Brno hl. n. - Odjezdy & Příjezdy</h1>
     
     <table>
         <thead>
@@ -31,67 +17,108 @@
                 <th>Čas</th>
                 <th>Vlak</th>
                 <th>Cíl</th>
-                <th>Nástupiště (Živě)</th>
-                <th>Predikce spolehlivosti / Očekávání</th>
+                <th>Nástupiště</th>
             </tr>
         </thead>
         <tbody id="board-body">
-            <tr><td colspan="5" style="text-align:center;">Načítám data z API...</td></tr>
+            <tr><td colspan="4" style="text-align:center; padding: 40px; color: #888;">Načítám predikční model...</td></tr>
         </tbody>
     </table>
 
     <script>
+        function getGaugeHtml(platformText, probability, isLive) {
+            let color = '#e2e3e5'; 
+            let pct = 0;
+            let probText = '';
+
+            if (probability !== null) {
+                pct = probability;
+                probText = `<div class="platform-prob">${pct}%</div>`;
+                if (pct >= 75) color = '#2ecc71';      
+                else if (pct >= 50) color = '#f39c12'; 
+                else color = '#e74c3c';                
+            }
+
+            const textClass = isLive ? 'is-live' : 'is-pred';
+            const dashOffset = 125.66 - ((125.66 * pct) / 100);
+
+            return `
+                <div class="gauge-wrapper">
+                    <svg viewBox="0 0 100 50" class="gauge-svg">
+                        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#e2e3e5" stroke-width="14" stroke-linecap="butt" />
+                        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="butt"
+                              stroke-dasharray="125.66" stroke-dashoffset="125.66"
+                              style="transition: stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1) 0.1s;"
+                              onload="this.style.strokeDashoffset='${dashOffset}'" />
+                    </svg>
+                    <div class="platform-number ${textClass}">${platformText}</div>
+                    ${probText}
+                </div>
+            `;
+        }
+
         async function loadBoard() {
             try {
                 const response = await fetch('/api/board');
                 const trains = await response.json();
                 const tbody = document.getElementById('board-body');
-                tbody.innerHTML = '';
+                
+                let tableHtml = '';
 
                 trains.forEach(train => {
                     let delayHtml = train.delay > 0 ? `<br><span class="delay">+${train.delay} min</span>` : '';
-                    let platformHtml = train.live_platform ? `<span class="platform">${train.live_platform}</span>` : '<em>Čeká</em>';
-                    
-                    let predHtml = '';
-                    const pred = train.prediction;
+                    let pred = train.prediction;
+                    let platformsHtml = '<div class="platforms-container">';
 
-                    if (pred.status === 'no_data') {
-                        predHtml = '<span style="color: #999; font-size:0.9em;">Sbíráme data...</span>';
-                    } 
-                    else if (pred.status === 'predict_new') {
-                        // Vlak nemá nástupiště - ukazujeme pravděpodobnosti ze stejného dne v týdnu
-                        pred.options.forEach(opt => {
-                            predHtml += `<div class="badge pred-new">Nástupiště ${opt.platform}: <strong>${opt.probability}%</strong></div><br>`;
-                        });
-                    } 
-                    else if (pred.status === 'predict_change') {
-                        // Vlak MÁ nástupiště - ukazujeme stabilitu a riziko změny
-                        predHtml += `<div class="badge pred-stay">Zůstane zde na <strong>${pred.stay_probability}%</strong></div>`;
-                        
-                        if (pred.changes && pred.changes.length > 0) {
-                            pred.changes.forEach(change => {
-                                predHtml += `<br><div class="badge pred-change">Riziko přesunu na ${change.platform}: <strong>${change.probability}%</strong></div>`;
+                    if (train.live_platform) {
+                        if (pred.status === 'no_data') {
+                            platformsHtml += getGaugeHtml(train.live_platform, null, true);
+                        } else if (pred.status === 'predict_change') {
+                            platformsHtml += getGaugeHtml(train.live_platform, pred.stay_probability, true);
+                            
+                            if (pred.changes && pred.changes.length > 0) {
+                                pred.changes.forEach(change => {
+                                    platformsHtml += getGaugeHtml(change.platform, change.probability, false);
+                                });
+                            }
+                        }
+                    } else {
+                        if (pred.status === 'no_data' || !pred.options || pred.options.length === 0) {
+                            platformsHtml += getGaugeHtml('-', null, false);
+                        } else if (pred.status === 'predict_new') {
+                            pred.options.forEach(opt => {
+                                platformsHtml += getGaugeHtml(opt.platform, opt.probability, false);
                             });
                         }
                     }
 
-                    const row = `
+                    platformsHtml += '</div>';
+
+                    tableHtml += `
                         <tr>
-                            <td>${train.time} ${delayHtml}</td>
-                            <td><strong>${train.type} ${train.number}</strong></td>
-                            <td>${train.destination}</td>
-                            <td>${platformHtml}</td>
-                            <td>${predHtml}</td>
+                            <td><strong>${train.time}</strong> ${delayHtml}</td>
+                            <td><strong class="train-name">${train.type} ${train.number}</strong></td>
+                            <td class="destination">${train.destination}</td>
+                            <td>${platformsHtml}</td>
                         </tr>
                     `;
-                    tbody.innerHTML += row;
                 });
+
+                tbody.innerHTML = tableHtml;
+
+                setTimeout(() => {
+                    document.querySelectorAll('.gauge-svg path:nth-child(2)').forEach(path => {
+                        const targetOffset = path.getAttribute('onload').match(/'([^']+)'/)[1];
+                        path.style.strokeDashoffset = targetOffset;
+                    });
+                }, 50);
+
             } catch (error) {
                 console.error("Chyba při načítání:", error);
+                document.getElementById('board-body').innerHTML = '<tr><td colspan="4" style="text-align:center; color:red;">Chyba připojení k serveru</td></tr>';
             }
         }
 
-        // Načíst při spuštění a pak každou minutu
         loadBoard();
         setInterval(loadBoard, 60000);
     </script>
