@@ -193,11 +193,16 @@ def api_board(station_key):
         try:
             h, m = map(int, t['time'].split(':'))
             dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
+            
+            # Odladěná obousměrná korekce kolem půlnoci
             if now.hour > 20 and h < 4:
                 dt += timedelta(days=1)
-            real_time = dt + timedelta(minutes=t['delay'])
-            return real_time
-        except:
+            elif now.hour < 4 and h > 20:
+                dt -= timedelta(days=1)
+            
+            # Řadíme VŽDY striktně podle plánovaného času (dt)
+            return dt
+        except Exception:
             return now
 
     combined_trains.sort(key=sort_key)
