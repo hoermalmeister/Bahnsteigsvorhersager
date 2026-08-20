@@ -105,12 +105,11 @@ def api_board(station_key):
             conn = get_db_connection()
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             
+            # Změna SQL: Už neseskupujeme do COUNT, potřebujeme surová data kvůli datumu a initial_platform
             query = f"""
-                SELECT train_type, train_number, final_platform, COUNT(*) as count
+                SELECT train_type, train_number, date, day_of_week, final_platform, initial_platform
                 FROM {table_name}
                 WHERE (train_type, train_number) IN %s
-                AND final_platform != ''
-                GROUP BY train_type, train_number, final_platform
             """
             cursor.execute(query, (tuple(trains_to_query),))
             rows = cursor.fetchall()
@@ -119,11 +118,32 @@ def api_board(station_key):
                 key = f"{row['train_type']}_{row['train_number']}"
                 if key not in history:
                     history[key] = []
-                history[key].append({"platform": row['final_platform'], "count": row['count']})
+                history[key].append(row)
                 
             conn.close()
         except Exception as e:
             print("DB Error:", e)
+
+    # Pomocná funkce pro extrakci přesného data vlaku z URL (pro statistiku i chronologické řazení)
+    def get_train_datetime(t, prague_now):
+        try:
+            h, m = map(int, t.get('DT', '00:00').split(':'))
+            match = re.search(r'/(\d{1,2}\.\d{1,2}\.\d{4})', t.get('URL', ''))
+            if match:
+                date_str = match.group(1)
+                train_date = datetime.strptime(date_str, "%d.%m.%Y").date()
+                dt = prague_now.replace(year=train_date.year, month=train_date.month, day=train_date.day, hour=h, minute=m, second=0, microsecond=0)
+                return dt, train_date
+            
+            # Záložní korekce (pokud URL datum nemá)
+            dt = prague_now.replace(hour=h, minute=m, second=0, microsecond=0)
+            if prague_now.hour >= 18 and h <= 12:
+                dt += timedelta(days=1)
+            elif prague_now.hour <= 6 and h >= 18:
+                dt -= timedelta(days=1)
+            return dt, dt.date()
+        except Exception:
+            return prague_now, prague_now.date()
 
     combined_trains = []
     for train in live_data:
@@ -141,39 +161,68 @@ def api_board(station_key):
         except:
             t_delay = 0
 
+        # Zjistíme přesné datum vlaku pro logiku filtrace
+        dt_obj, t_date = get_train_datetime(train, now)
+        t_date_str = t_date.strftime('%Y-%m-%d')
+        is_weekend = t_date.weekday() >= 5 # 5 = Sobota, 6 = Neděle
+
         key = f"{t_type}_{t_num}"
-        hist_records = history.get(key, [])
+        raw_hist = history.get(key, [])
+        
+        # PRAVIDLO 1: Nikdy nezahrnovat stejné datum, jako je datum odjezdu!
+        valid_hist = [r for r in raw_hist if r['date'] != t_date_str]
         
         prediction = {"status": "no_data"}
         
-        if hist_records:
-            total = sum(r['count'] for r in hist_records)
-            hist_records.sort(key=lambda x: x['count'], reverse=True)
+        if live_platform:
+            # PRAVIDLO 2: Vlak MÁ nástupiště -> final_platform vs initial_platform
+            stay_count = 0
+            changes_dict = {}
             
-            if live_platform:
-                stay_count = next((r['count'] for r in hist_records if r['platform'] == live_platform), 0)
-                stay_prob = int((stay_count / total) * 100) if total > 0 else 0
+            for r in valid_hist:
+                if r['final_platform'] == live_platform:
+                    stay_count += 1
+                elif r['initial_platform'] == live_platform and r['final_platform'] != live_platform and r['final_platform'] != '':
+                    alt = r['final_platform']
+                    changes_dict[alt] = changes_dict.get(alt, 0) + 1
+            
+            changed_count = sum(changes_dict.values())
+            total_cases = stay_count + changed_count
+            
+            if total_cases > 0:
+                # Omezení stropu na 99 %
+                stay_prob = min(99, int((stay_count / total_cases) * 100))
                 
-                changes = []
-                for r in hist_records:
-                    if r['platform'] != live_platform:
-                        changes.append({
-                            "platform": r['platform'],
-                            "probability": int((r['count'] / total) * 100)
-                        })
+                changes_list = []
+                for alt_plat, count in sorted(changes_dict.items(), key=lambda x: x[1], reverse=True):
+                    changes_list.append({
+                        "platform": alt_plat,
+                        "probability": min(99, int((count / total_cases) * 100))
+                    })
                 
                 prediction = {
                     "status": "predict_change",
                     "stay_probability": stay_prob,
-                    "changes": changes[:2]
+                    "changes": changes_list[:2]
                 }
-            else:
+        else:
+            # PRAVIDLO 3: Vlak NEMÁ nástupiště -> hledáme čistě podle final_platform o víkendu/v týdnu
+            matched_hist = [r for r in valid_hist if (r['day_of_week'] >= 5) == is_weekend and r['final_platform'] != '']
+            
+            if matched_hist:
+                freq = {}
+                for r in matched_hist:
+                    p = r['final_platform']
+                    freq[p] = freq.get(p, 0) + 1
+                
+                total = len(matched_hist)
                 options = []
-                for r in hist_records[:3]:
+                for p, count in sorted(freq.items(), key=lambda x: x[1], reverse=True)[:3]:
                     options.append({
-                        "platform": r['platform'],
-                        "probability": int((r['count'] / total) * 100)
+                        "platform": p,
+                        "probability": min(99, int((count / total) * 100))
                     })
+                
                 prediction = {
                     "status": "predict_new",
                     "options": options
@@ -188,35 +237,19 @@ def api_board(station_key):
             "delay": t_delay,
             "live_platform": live_platform,
             "prediction": prediction,
-            "url": train.get('URL', '')
+            "planned_datetime": dt_obj  # Uložíme si do slovníku správný čas pro řazení
         })
 
+    # Řadíme VŽDY chronologicky podle plánovaného času (dt_obj z předchozí funkce)
     def sort_key(t):
-        try:
-            h, m = map(int, t['time'].split(':'))
-            
-            # OPRAVA 1: Odebráno koncové lomítko, regex teď najde datum vždy
-            match = re.search(r'/(\d{1,2}\.\d{1,2}\.\d{4})', t.get('url', ''))
-            if match:
-                date_str = match.group(1)
-                train_date = datetime.strptime(date_str, "%d.%m.%Y").date()
-                return now.replace(year=train_date.year, month=train_date.month, day=train_date.day, hour=h, minute=m, second=0, microsecond=0)
-            
-            # OPRAVA 2: Rozšířená záchranná síť, pokud by API URL vůbec neposlalo
-            dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
-            
-            # Pokud je teď večer (po 18:00) a vlak má jet ráno (do 12:00), je to 100% zítřejší vlak
-            if now.hour >= 18 and h <= 12:
-                dt += timedelta(days=1)
-            # Pokud je teď po půlnoci (do 6:00) a vlak měl jet včera večer (po 18:00), je to zpožděný včerejší vlak
-            elif now.hour <= 6 and h >= 18:
-                dt -= timedelta(days=1)
-                
-            return dt
-        except Exception:
-            return now
+        return t['planned_datetime']
 
     combined_trains.sort(key=sort_key)
+    
+    # Odstraníme pomocný datetime objekt před odesláním do prohlížeče
+    for t in combined_trains:
+        del t['planned_datetime']
+        
     return jsonify(combined_trains[:40])
 
 if __name__ == '__main__':
