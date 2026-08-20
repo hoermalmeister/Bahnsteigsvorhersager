@@ -3,13 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bahnsteigsvorhersager - Brno hl. n.</title>
+    <title>Bahnsteigsvorhersager - {{ station_name }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+    <style>
+        /* Styl pro tlačítko "Zpět" */
+        .back-link { display: block; text-align: center; margin-top: -20px; margin-bottom: 30px; font-size: 0.9em; text-decoration: none; color: var(--text-muted); }
+        .back-link:hover { text-decoration: underline; color: var(--header-bg); }
+    </style>
 </head>
 <body>
 
-    <h1>Bahnsteigsvorhersager - Brno hl. n.</h1>
+    <h1>Bahnsteigsvorhersager - {{ station_name }}</h1>
+    <a href="/" class="back-link">← Výběr stanice</a>
     
     <table>
         <thead>
@@ -26,6 +32,8 @@
     </table>
 
     <script>
+        const STATION_KEY = "{{ station_key }}";
+        
         function getGaugeHtml(platformText, probability, isLive) {
             let color = 'var(--gauge-empty)'; 
             let pct = 0;
@@ -70,7 +78,7 @@
 
         async function loadBoard() {
             try {
-                const response = await fetch('/api/board');
+                const response = await fetch(`/api/board/${STATION_KEY}`);
                 const trains = await response.json();
                 const tbody = document.getElementById('board-body');
                 
