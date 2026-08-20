@@ -7,15 +7,23 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
     <style>
-        /* Styl pro tlačítko "Zpět" */
-        .back-link { display: block; text-align: center; margin-top: -20px; margin-bottom: 30px; font-size: 0.9em; text-decoration: none; color: var(--text-muted); }
-        .back-link:hover { text-decoration: underline; color: var(--header-bg); }
+        .station-switch {
+            color: inherit;
+            text-decoration: none;
+            border-bottom: 3px dotted var(--header-bg);
+            transition: opacity 0.2s ease, color 0.2s ease;
+            cursor: pointer;
+            padding-bottom: 2px;
+        }
+        .station-switch:hover {
+            opacity: 0.8;
+            color: #004a8f; /* Lehce modrý nádech při najetí myší */
+        }
     </style>
 </head>
 <body>
 
-    <h1>Bahnsteigsvorhersager - {{ station_name }}</h1>
-    <a href="/" class="back-link">← Výběr stanice</a>
+    <h1>Bahnsteigsvorhersager - <a href="/{{ next_station_key }}" class="station-switch" title="Kliknutím přepnete na další stanici">{{ station_name }}</a></h1>
     
     <table>
         <thead>
