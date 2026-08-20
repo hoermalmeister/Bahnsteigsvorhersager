@@ -24,7 +24,7 @@ def get_db_connection():
 def home():
     return redirect('/brno')
 
-# 2. Generování tabule s výpočtem další stanice v pořadí
+# 2. Generování tabule s výpočtem další stanice v pořadí (POUZE JEDNOU!)
 @app.route('/<station_key>')
 def station_board(station_key):
     if station_key not in STATIONS:
@@ -42,13 +42,7 @@ def station_board(station_key):
                            station_name=station_name,
                            next_station_key=next_station_key)
 
-@app.route('/<station_key>')
-def station_board(station_key):
-    if station_key not in STATIONS:
-        return "Stanice nenalezena", 404
-    station_name = STATIONS[station_key]['name']
-    return render_template('index.html', station_key=station_key, station_name=station_name)
-
+# 3. API pro konkrétní stanici
 @app.route('/api/board/<station_key>')
 def api_board(station_key):
     if station_key not in STATIONS:
