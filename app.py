@@ -10,9 +10,9 @@ app = Flask(__name__)
 DB_URL = os.environ.get('DATABASE_URL')
 
 STATIONS = {
-    "praha": {"id": "5457076", "slug": "praha-hl-n-", "name": "Praha hl.n."},
-    "brno": {"id": "5433295", "slug": "brno-hl-n-", "name": "Brno hl.n."},
-    "olomouc": {"id": "5434362", "slug": "olomouc-hl-n-", "name": "Olomouc hl.n."}
+    "praha": {"id": "5457076", "name": "Praha hl.n."},
+    "brno": {"id": "5433295", "name": "Brno hl.n."},
+    "olomouc": {"id": "5434362", "name": "Olomouc hl.n."}
 }
 
 def get_db_connection():
@@ -55,20 +55,28 @@ def station_board(station_key):
     station_name = STATIONS[station_key]['name']
     return render_template('index.html', station_key=station_key, station_name=station_name)
 
-headers = {
+@app.route('/api/board/<station_key>')
+def api_board(station_key):
+    if station_key not in STATIONS:
+        return jsonify({"error": "Neznámá stanice"}), 404
+        
+    station_id = STATIONS[station_key]['id']
+    table_name = f"history_{station_key}"
+    
+    prague_tz = ZoneInfo("Europe/Prague")
+    now = datetime.now(prague_tz)
+    
+    headers = {
         "Accept": "*/*",
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Referer": f"https://www.cd.cz/stanice/{station_id}"
     }
-    
-    # URL už obsahuje pouze ID, žádné textové názvy, na které je server citlivý
     url = f"https://www.cd.cz/stanice/{station_id}/getopt"
     
     try:
         resp_dep = requests.post(url, headers=headers, data="language=cs&isDeep=true&toHistory=false", timeout=5)
         
-        # Záchranná brzda: Pokud nám Dráhy nevrátí stav 200 OK, rovnou vyhodíme srozumitelnou chybu
         if resp_dep.status_code != 200:
             return jsonify({"error": f"ČD API vrátilo chybu {resp_dep.status_code}"}), 500
             
@@ -78,7 +86,6 @@ headers = {
         arrs = resp_arr.json().get('Trains', [])[:60]
         
     except Exception as e:
-        # Pokud nevrátí platný JSON, vypíšeme to čistě do konzole webu
         return jsonify({"error": f"Chyba komunikace s ČD: {str(e)}"}), 500
 
     dep_numbers = {str(t.get('TrainNumber', '')) for t in deps}
