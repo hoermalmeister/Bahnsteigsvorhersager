@@ -43,17 +43,18 @@
 
             const textClass = isLive ? 'is-live' : 'is-pred';
             
-            // Nová matematika - menší průměr (poloměr 35). Délka oblouku je 81.
+            // Délka oblouku zůstává
             const arcLength = 81;
             const dashOffset = arcLength - ((arcLength * pct) / 100);
 
-            // viewBox je nyní protáhnutý do výšky (100 x 45)
-            // Oblouk končí ve výšce Y=24, takže pod ním vzniká volný prostor (21 bodů) pro usazení textu
+            // ZMĚNA: viewBox je nyní na výšku 60 (bylo 45). 
+            // Oblouk končí ve výšce Y=28.
+            // Od bodu 28 až do 60 tak vzniká obrovský prostor "vzduchu", do kterého krásně zapadne text.
             return `
                 <div class="gauge-wrapper">
-                    <svg viewBox="0 0 100 45" class="gauge-svg">
-                        <path d="M 18 24 A 35 35 0 0 1 82 24" fill="none" stroke="var(--gauge-empty)" stroke-width="6" stroke-linecap="round" />
-                        <path d="M 18 24 A 35 35 0 0 1 82 24" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round"
+                    <svg viewBox="0 0 100 60" class="gauge-svg">
+                        <path d="M 18 28 A 35 35 0 0 1 82 28" fill="none" stroke="var(--gauge-empty)" stroke-width="6" stroke-linecap="round" />
+                        <path d="M 18 28 A 35 35 0 0 1 82 28" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round"
                               stroke-dasharray="${arcLength}" stroke-dashoffset="${arcLength}"
                               style="transition: stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1);"
                               class="gauge-anim-path" data-target-offset="${dashOffset}" />
@@ -66,7 +67,7 @@
                 </div>
             `;
         }
-
+        
         async function loadBoard() {
             try {
                 const response = await fetch('/api/board');
