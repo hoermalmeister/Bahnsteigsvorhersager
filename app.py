@@ -1,7 +1,7 @@
 import os
-from flask import Flask, render_template, jsonify, render_template_string
-import requests
 import re
+from flask import Flask, render_template, jsonify, redirect
+import requests
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
@@ -19,35 +19,28 @@ STATIONS = {
 def get_db_connection():
     return psycopg2.connect(DB_URL)
 
+# 1. Čistá doména nyní automaticky přesměruje na Brno
 @app.route('/')
 def home():
-    html = """
-    <!DOCTYPE html>
-    <html lang="cs">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Chytrá Tabule - Výběr stanice</title>
-        <style>
-            body { font-family: 'Bahnschrift', sans-serif; background: #f4f7f6; color: #222; text-align: center; padding: 50px; }
-            @media (prefers-color-scheme: dark) { body { background: #121212; color: #e0e0e0; } }
-            .grid { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; max-width: 800px; margin: 40px auto; }
-            a.btn { text-decoration: none; background: #004a8f; color: white; padding: 20px 40px; border-radius: 8px; font-size: 1.2em; transition: 0.2s; }
-            a.btn:hover { background: #003366; transform: scale(1.05); }
-            @media (prefers-color-scheme: dark) { a.btn { background: #153b6b; } }
-        </style>
-    </head>
-    <body>
-        <h1>Vyberte stanici</h1>
-        <div class="grid">
-            {% for key, st in stations.items() %}
-                <a href="/{{ key }}" class="btn">{{ st.name }}</a>
-            {% endendfor %}
-        </div>
-    </body>
-    </html>
-    """
-    return render_template_string(html, stations=STATIONS)
+    return redirect('/brno')
+
+# 2. Generování tabule s výpočtem další stanice v pořadí
+@app.route('/<station_key>')
+def station_board(station_key):
+    if station_key not in STATIONS:
+        return "Stanice nenalezena", 404
+        
+    station_name = STATIONS[station_key]['name']
+    
+    # Zjistíme, jaká stanice následuje pro klikací rotaci v nadpisu
+    keys = list(STATIONS.keys())
+    current_index = keys.index(station_key)
+    next_station_key = keys[(current_index + 1) % len(keys)]
+    
+    return render_template('index.html', 
+                           station_key=station_key, 
+                           station_name=station_name,
+                           next_station_key=next_station_key)
 
 @app.route('/<station_key>')
 def station_board(station_key):
