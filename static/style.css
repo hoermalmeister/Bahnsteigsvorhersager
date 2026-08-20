@@ -69,9 +69,9 @@ tr:hover { background-color: var(--table-hover); }
 /* SAMOTNÝ BUDÍK (Gauge Chart) */
 .gauge-wrapper { 
     position: relative; 
-    width: 65px; /* Kompaktnější, jelikož jsme odstranili mezery */
+    width: 65px; 
     display: inline-block;
-    margin-bottom: 6px; /* Rezerva pro text, který bude vysunutý níže */
+    /* Margin z minula je pryč, prostor nyní tvoří rovnou větší SVG viewBox */
 }
 
 .gauge-svg { 
@@ -80,10 +80,10 @@ tr:hover { background-color: var(--table-hover); }
     display: block; 
 }
 
-/* Obal na text s novým usazením */
+/* Obal na text */
 .gauge-content {
     position: absolute;
-    bottom: -8px; /* TÍMTO se číslo posune mírně dolů pod úroveň klenby */
+    bottom: 0; /* Text se hezky usadí dole v prázdném prostoru SVG boxu */
     left: 0;
     right: 0;
     height: 100%;
@@ -99,7 +99,6 @@ tr:hover { background-color: var(--table-hover); }
 /* Typografie nástupišť */
 .is-live { font-weight: 700; font-size: 1.35em; color: var(--gauge-text-live); }
 .is-pred { font-weight: 500; font-size: 1.15em; color: var(--gauge-text-pred); }
-
 /* Typografie nástupišť */
 .is-live { font-weight: 700; font-size: 1.5em; color: var(--gauge-text-live); }
 .is-pred { font-weight: 400; font-size: 1.25em; color: var(--gauge-text-pred); }
