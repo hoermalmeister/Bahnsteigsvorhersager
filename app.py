@@ -148,6 +148,10 @@ def api_board(station_key):
         t_time = train.get('DT', '00:00')
         raw_dest = train.get('Terminus', '') or train.get('Destination', '')
         
+        # Pokud je název celý velkými písmeny, převedeme ho na normální tvar
+        if raw_dest.isupper():
+            raw_dest = raw_dest.title().replace("Hl.N.", "hl.n.").replace(" Hl. N.", " hl.n.")
+        
         if train.get('_is_pure_arrival'):
             t_dest = f"Ze směru: {raw_dest}" if raw_dest else "Příjezd"
         else:
