@@ -224,7 +224,7 @@ def api_board(station_key):
                 prediction = {
                     "status": "predict_change",
                     "stay_probability": stay_prob,
-                    "changes": changes_list[:2]
+                    "changes": changes_list[:4]
                 }
         else:
             matched_hist = [r for r in working_hist if (r['day_of_week'] >= 5) == pt['is_weekend'] and r['final_platform'] != '']
@@ -237,7 +237,7 @@ def api_board(station_key):
                 
                 total = len(matched_hist)
                 options = []
-                for p, count in sorted(freq.items(), key=lambda x: x[1], reverse=True)[:3]:
+                for p, count in sorted(freq.items(), key=lambda x: x[1], reverse=True)[:4]:
                     options.append({
                         "platform": p,
                         "probability": min(99, int((count / total) * 100))
@@ -261,7 +261,7 @@ def api_board(station_key):
                             is_blocked = True
                             break
                 if is_blocked:
-                    opt['probability'] = int(opt['probability'] * 0.2) # Sníží šanci o 80 %
+                    opt['probability'] = int(opt['probability'] * 0.2)
             
             # Přeřazení podle nových (snížených) pravděpodobností
             prediction[options_key].sort(key=lambda x: x['probability'], reverse=True)
