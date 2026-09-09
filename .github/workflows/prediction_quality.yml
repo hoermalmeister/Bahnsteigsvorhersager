@@ -13,7 +13,7 @@ jobs:
     - name: Code preparation
       uses: actions/checkout@v4
 
-    - name: Pythonu preparation
+    - name: Python preparation
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
