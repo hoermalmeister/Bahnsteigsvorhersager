@@ -106,6 +106,28 @@ def update_predictions(run_all=False):
         if run_all:
             print(f"[{station_name}] Dávka dokončena. Data jsou zapsána.")
 
+    if datetime.now().weekday() == 6 or run_all:
+            archive_table = f"archive_{station_key}"
+            print(f"[{station_name}] Spouštím přesun starých dat do archivu ({archive_table})...")
+            
+            # 1. Vytvoří archivní tabulku se stejnou strukturou jako má hlavní tabulka
+            cursor.execute(f"CREATE TABLE IF NOT EXISTS {archive_table} (LIKE {table_name} INCLUDING ALL);")
+            
+            # 2. Smaže starší 3 měsíců a přesune je do archivu v jednom kroku
+            cursor.execute(f"""
+                WITH moved_rows AS (
+                    DELETE FROM {table_name}
+                    WHERE date < CURRENT_DATE - INTERVAL '3 months'
+                    RETURNING *
+                )
+                INSERT INTO {archive_table}
+                SELECT * FROM moved_rows;
+            """)
+            
+            moved_count = cursor.rowcount
+            print(f"[{station_name}] Přesunuto {moved_count} starých záznamů.")
+            conn.commit()
+            
     conn.close()
 
 if __name__ == '__main__':
