@@ -6,9 +6,12 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+import time
 
 app = Flask(__name__)
 DB_URL = os.environ.get('DATABASE_URL')
+BOARD_CACHE = {}
+CACHE_TTL = 60
 
 STATIONS = {
     "praha": {"id": "5457076", "name": "Praha hl.n."},
@@ -47,6 +50,11 @@ def station_board(station_key):
 def api_board(station_key):
     if station_key not in STATIONS:
         return jsonify({"error": "Neznámá stanice"}), 404
+
+    now_ts = time.time()
+    cached = BOARD_CACHE.get(station_key)
+    if cached and (now_ts - cached['time']) < CACHE_TTL:
+        return jsonify(cached['data'])
         
     station_id = STATIONS[station_key]['id']
     table_name = f"history_{station_key}"
@@ -289,7 +297,10 @@ def api_board(station_key):
     for t in combined_trains:
         del t['planned_datetime']
         
-    return jsonify(combined_trains[:40])
+    final_data = combined_trains[:40]
+    BOARD_CACHE[station_key] = {"time": now_ts, "data": final_data}
+    
+    return jsonify(final_data)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
