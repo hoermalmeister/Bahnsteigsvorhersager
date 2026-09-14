@@ -68,10 +68,12 @@ def api_board(station_key):
         if resp_dep.status_code != 200:
             return jsonify({"error": f"ČD API vrátilo chybu {resp_dep.status_code}"}), 500
             
-        deps = resp_dep.json().get('Trains', [])[:60]
+        # Oříznutí stažených odjezdů na 30 spojů
+        deps = resp_dep.json().get('Trains', [])[:30]
         
         resp_arr = requests.post(url, headers=headers, data="language=cs&isDeep=false&toHistory=false", timeout=5)
-        arrs = resp_arr.json().get('Trains', [])[:60]
+        # Oříznutí stažených příjezdů na 30 spojů
+        arrs = resp_arr.json().get('Trains', [])[:30]
         
     except Exception as e:
         return jsonify({"error": f"Chyba komunikace s ČD: {str(e)}"}), 500
@@ -105,6 +107,7 @@ def api_board(station_key):
                 SELECT train_type, train_number, date, day_of_week, final_platform, initial_platform, delay_minutes
                 FROM {table_name}
                 WHERE (train_type, train_number) IN %s
+                AND date >= CURRENT_DATE - INTERVAL '3 months'
             """
             cursor.execute(query, (tuple(trains_to_query),))
             rows = cursor.fetchall()
@@ -174,7 +177,7 @@ def api_board(station_key):
             "dt_obj": dt_obj,
             "real_time": real_time,
             "t_date_str": t_date.strftime('%Y-%m-%d'),
-            "is_weekend": t_date.weekday() >= 5
+            "is_weekend": t_date.weekday()
         })
 
     # FÁZE 2: Výpočet predikcí
@@ -227,7 +230,7 @@ def api_board(station_key):
                     "changes": changes_list[:4]
                 }
         else:
-            matched_hist = [r for r in working_hist if (r['day_of_week'] >= 5) == pt['is_weekend'] and r['final_platform'] != '']
+            matched_hist = [r for r in working_hist if r['day_of_week'] == pt['day_of_week'] and r['final_platform'] != '']
             
             if matched_hist:
                 freq = {}
