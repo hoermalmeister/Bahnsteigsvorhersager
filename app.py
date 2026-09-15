@@ -8,10 +8,12 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import time
 
-app = Flask(__name__)
-DB_URL = os.environ.get('DATABASE_URL')
 BOARD_CACHE = {}
 CACHE_TTL = 60
+
+app = Flask(__name__)
+DB_URL = os.environ.get('DATABASE_URL')
+
 
 STATIONS = {
     "praha": {"id": "5457076", "name": "Praha hl.n."},
@@ -50,12 +52,13 @@ def station_board(station_key):
 def api_board(station_key):
     if station_key not in STATIONS:
         return jsonify({"error": "Neznámá stanice"}), 404
-
+        
+    # 1. RAM CACHE: Pokud se někdo ptal v poslední minutě, vrátíme data z paměti (0 % zátěž CPU)
     now_ts = time.time()
     cached = BOARD_CACHE.get(station_key)
     if cached and (now_ts - cached['time']) < CACHE_TTL:
         return jsonify(cached['data'])
-        
+
     station_id = STATIONS[station_key]['id']
     table_name = f"history_{station_key}"
     
@@ -72,15 +75,13 @@ def api_board(station_key):
     
     try:
         resp_dep = requests.post(url, headers=headers, data="language=cs&isDeep=true&toHistory=false", timeout=5)
-        
         if resp_dep.status_code != 200:
             return jsonify({"error": f"ČD API vrátilo chybu {resp_dep.status_code}"}), 500
             
-        # Oříznutí stažených odjezdů na 30 spojů
+        # RAM ÚSPORA: Stahujeme maximálně 30 spojů
         deps = resp_dep.json().get('Trains', [])[:30]
         
         resp_arr = requests.post(url, headers=headers, data="language=cs&isDeep=false&toHistory=false", timeout=5)
-        # Oříznutí stažených příjezdů na 30 spojů
         arrs = resp_arr.json().get('Trains', [])[:30]
         
     except Exception as e:
@@ -88,13 +89,10 @@ def api_board(station_key):
 
     dep_numbers = {str(t.get('TrainNumber', '')) for t in deps}
     live_data = []
-    
-    # Zpracování odjezdů (a projíždějících vlaků)
     for t in deps:
         t['_is_pure_arrival'] = False
         live_data.append(t)
         
-    # Zpracování čistých příjezdů (vlaky, co zde končí)
     for t in arrs:
         if str(t.get('TrainNumber', '')) not in dep_numbers:
             t['_is_pure_arrival'] = True
@@ -110,12 +108,12 @@ def api_board(station_key):
             conn = get_db_connection()
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             
-            # Přidán sloupec delay_minutes pro chytřejší korelaci
+            # OPRAVA SQL: Přidáno CAST(date AS DATE), aby databáze nespadla
             query = f"""
-                SELECT train_type, train_number, date, day_of_week, final_platform, initial_platform, delay_minutes
+                SELECT train_type, train_number, date, day_of_week, final_platform, initial_platform
                 FROM {table_name}
                 WHERE (train_type, train_number) IN %s
-                AND date >= CURRENT_DATE - INTERVAL '3 months'
+                AND CAST(date AS DATE) >= CURRENT_DATE - INTERVAL '3 months'
             """
             cursor.execute(query, (tuple(trains_to_query),))
             rows = cursor.fetchall()
@@ -149,33 +147,20 @@ def api_board(station_key):
         except Exception:
             return prague_now, prague_now.date()
 
-    # FÁZE 1: Předzpracování a mapa obsazenosti
     parsed_trains = []
-    occupied_blocks = []
-
     for train in live_data:
         t_type = train.get('Type', '')
         t_num = str(train.get('TrainNumber', ''))
-        
         try:
             t_delay = int(train.get('Delay', 0))
         except:
             t_delay = 0
 
         dt_obj, t_date = get_train_datetime(train, now)
-        real_time = dt_obj + timedelta(minutes=t_delay)
         
         platform_raw = train.get('StandAndTrackBox', '')
         live_platform = platform_raw.replace('Nást.', '').replace('kol.', '').replace(' ', '') if platform_raw else None
         
-        # Zapíšeme si obsazené nástupiště a reálný čas
-        if live_platform:
-            occupied_blocks.append({
-                "platform": live_platform,
-                "real_time": real_time,
-                "train_key": f"{t_type}_{t_num}"
-            })
-            
         parsed_trains.append({
             "raw": train,
             "type": t_type,
@@ -183,12 +168,10 @@ def api_board(station_key):
             "delay": t_delay,
             "live_platform": live_platform,
             "dt_obj": dt_obj,
-            "real_time": real_time,
             "t_date_str": t_date.strftime('%Y-%m-%d'),
-            "is_weekend": t_date.weekday()
+            "day_of_week": t_date.weekday() # CPU ÚSPORA: Ukládáme jen číslo dne
         })
 
-    # FÁZE 2: Výpočet predikcí
     combined_trains = []
     for pt in parsed_trains:
         raw_dest = pt['raw'].get('Terminus', '') or pt['raw'].get('Destination', '')
@@ -202,19 +185,14 @@ def api_board(station_key):
 
         key = f"{pt['type']}_{pt['num']}"
         raw_hist = history.get(key, [])
-        valid_hist = [r for r in raw_hist if r['date'] != pt['t_date_str']]
-        
-        # Korelace zpoždění: Filtrace historie na podobné zpoždění (+- 5 minut)
-        delay_hist = [r for r in valid_hist if abs((r.get('delay_minutes') or 0) - pt['delay']) <= 5]
-        working_hist = delay_hist if len(delay_hist) >= 2 else valid_hist
+        valid_hist = [r for r in raw_hist if str(r['date']) != pt['t_date_str']]
         
         prediction = {"status": "no_data"}
         
         if pt['live_platform']:
             stay_count = 0
             changes_dict = {}
-            
-            for r in working_hist:
+            for r in valid_hist:
                 if r['final_platform'] == pt['live_platform']:
                     stay_count += 1
                 elif r['initial_platform'] == pt['live_platform'] and r['final_platform'] != pt['live_platform'] and r['final_platform'] != '':
@@ -222,7 +200,6 @@ def api_board(station_key):
                     changes_dict[alt] = changes_dict.get(alt, 0) + 1
             
             total_cases = stay_count + sum(changes_dict.values())
-            
             if total_cases > 0:
                 stay_prob = min(99, int((stay_count / total_cases) * 100))
                 changes_list = []
@@ -231,21 +208,19 @@ def api_board(station_key):
                         "platform": alt_plat,
                         "probability": min(99, int((count / total_cases) * 100))
                     })
-                
                 prediction = {
                     "status": "predict_change",
                     "stay_probability": stay_prob,
                     "changes": changes_list[:4]
                 }
         else:
-            matched_hist = [r for r in working_hist if r['day_of_week'] == pt['day_of_week'] and r['final_platform'] != '']
-            
+            # CPU ÚSPORA: Filtrace pouze na stejný den v týdnu
+            matched_hist = [r for r in valid_hist if r['day_of_week'] == pt['day_of_week'] and r['final_platform'] != '']
             if matched_hist:
                 freq = {}
                 for r in matched_hist:
                     p = r['final_platform']
                     freq[p] = freq.get(p, 0) + 1
-                
                 total = len(matched_hist)
                 options = []
                 for p, count in sorted(freq.items(), key=lambda x: x[1], reverse=True)[:4]:
@@ -253,29 +228,10 @@ def api_board(station_key):
                         "platform": p,
                         "probability": min(99, int((count / total) * 100))
                     })
-                
                 prediction = {
                     "status": "predict_new",
                     "options": options
                 }
-
-        # Detekce kolizí s již obsazenými nástupišti (+- 3 minuty)
-        if prediction['status'] in ['predict_new', 'predict_change']:
-            options_key = 'options' if prediction['status'] == 'predict_new' else 'changes'
-            
-            for opt in prediction[options_key]:
-                is_blocked = False
-                for occ in occupied_blocks:
-                    if occ['platform'] == opt['platform'] and occ['train_key'] != key:
-                        diff_seconds = abs((occ['real_time'] - pt['real_time']).total_seconds())
-                        if diff_seconds <= 180:
-                            is_blocked = True
-                            break
-                if is_blocked:
-                    opt['probability'] = int(opt['probability'] * 0.2)
-            
-            # Přeřazení podle nových (snížených) pravděpodobností
-            prediction[options_key].sort(key=lambda x: x['probability'], reverse=True)
 
         combined_trains.append({
             "type": pt['type'],
@@ -291,12 +247,12 @@ def api_board(station_key):
 
     def sort_key(t):
         return t['planned_datetime']
-
+        
     combined_trains.sort(key=sort_key)
-    
     for t in combined_trains:
         del t['planned_datetime']
         
+    # Uložíme výsledek do Cache a ořízneme na 40 záznamů
     final_data = combined_trains[:40]
     BOARD_CACHE[station_key] = {"time": now_ts, "data": final_data}
     
